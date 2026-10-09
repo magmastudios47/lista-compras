@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Consultas de Chef restantes en el mes"
           >
             <Sparkles className="w-3.5 h-3.5 text-chef-500 fill-chef-500" />
-            <span>{isPremium ? 'PRO Ilimitado' : `${remainingQueries} chef`}</span>
+            <span>{isPremium ? `PRO (${remainingQueries})` : `${remainingQueries} chef`}</span>
           </button>
 
           {/* Compartir por WhatsApp */}

@@ -87,9 +87,9 @@
   - [x] Pruebas automáticas con 2 usuarios simulados (sincronización en vivo y aislamiento RLS)
   - [x] Guía de prueba local con dos navegadores en `SETUP.md`
   - [x] Creación de `docs/DEPLOY.md` (Vercel, Netlify, Cloudflare Pages)
-- [ ] **Bloque 9: Revisión Final Completa (QA)**
-  - [ ] Recorrido en viewports móvil (390x844) y escritorio
-  - [ ] Chequeo de consola, red, service worker, manifest PWA
-  - [ ] Creación de `docs/QA-REPORT.md`
-  - [ ] Creación de `docs/RONDA2-3.md`
-  - [ ] Actualización de SKILL.md, SETUP.md y task.md
+- [x] **Bloque 9: Revisión Final Completa (QA)**
+  - [x] Recorrido en viewports móvil (390x844) y escritorio
+  - [x] Chequeo de consola, red, service worker, manifest PWA
+  - [x] Creación de `docs/QA-REPORT.md`
+  - [x] Creación de `docs/RONDA2-3.md`
+  - [x] Actualización de SKILL.md, SETUP.md y task.md
