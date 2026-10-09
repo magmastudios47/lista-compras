@@ -83,10 +83,10 @@
   - [x] Precio opcional por ítem, total estimado aproximado y memoria por hogar
   - [x] Costo aproximado por receta
   - [x] Investigación documentada en `docs/PRECIOS.md` sobre SEPA / Precios Claros
-- [ ] **Bloque 8: Hogares Multiusuario y Guías de Despliegue**
-  - [ ] Pruebas automáticas con 2 usuarios simulados (sincronización en vivo y aislamiento RLS)
-  - [ ] Guía de prueba local con dos navegadores en `SETUP.md`
-  - [ ] Creación de `docs/DEPLOY.md` (Vercel, Netlify, Cloudflare Pages)
+- [x] **Bloque 8: Hogares Multiusuario y Guías de Despliegue**
+  - [x] Pruebas automáticas con 2 usuarios simulados (sincronización en vivo y aislamiento RLS)
+  - [x] Guía de prueba local con dos navegadores en `SETUP.md`
+  - [x] Creación de `docs/DEPLOY.md` (Vercel, Netlify, Cloudflare Pages)
 - [ ] **Bloque 9: Revisión Final Completa (QA)**
   - [ ] Recorrido en viewports móvil (390x844) y escritorio
   - [ ] Chequeo de consola, red, service worker, manifest PWA

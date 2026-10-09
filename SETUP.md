@@ -160,5 +160,28 @@ Para que a tu familia le suene el teléfono cuando alguien tacha o suma algo:
 
 ---
 
+## Paso 7: Cómo probar localmente con dos navegadores (Ventana normal e incógnito)
+
+Para verificar cómo interactúan dos personas de la misma casa en tiempo real desde tu propia computadora:
+
+1. **Usuario 1 (Ventana normal de Chrome/Firefox/Edge):**
+   - Abrí `http://localhost:3000`.
+   - Ingresá como "Facundo" (o tu nombre) y creá tu hogar (ej: "Hogar Pehuenes").
+   - En la barra superior, mirá el código de invitación (ej: `AB12CD`) o tocá el botón de compartir enlace.
+
+2. **Usuario 2 (Ventana de incógnito / privada):**
+   - Abrí una nueva ventana de incógnito (`Ctrl + Shift + N` o `Cmd + Shift + N`).
+   - Abrí `http://localhost:3000` (o pegá el link de invitación con `?join=AB12CD`).
+   - Ingresá como "Lucía" (o un segundo email/nombre).
+   - Ingresá el código de invitación en la pantalla de bienvenida si no entraste por el enlace directo.
+
+3. **Pruebas en vivo lado a lado:**
+   - **Agregar productos:** En la ventana de Facundo, agregá "Yerba mate" o "2 kg de papa". Mirá la ventana de Lucía: el producto aparecerá al instante con el cartel *"Agregado por Facundo"*.
+   - **Tachar en el súper:** En la ventana de Lucía, tocá el círculo para marcarlo comprado. En la ventana de Facundo se tachará en tiempo real y sonará el efecto.
+   - **Vaciar y Deshacer:** En cualquiera de las dos ventanas, tocá "Vaciar comprados". Desaparecerán de ambas pantallas y aparecerá la barra verde de *"Deshacer (10s)"*. Tocá "Deshacer" y volverán a estar presentes de inmediato.
+   - **Aislamiento entre familias:** Si abrís un tercer navegador con otro hogar distinto, podés comprobar que no ve absolutamente nada de la lista, despensa ni licencias del Hogar Pehuenes.
+
+---
+
 ## ¿Dudas o Soporte?
 Cualquier cambio de recetas, ingredientes patagónicos o ajustes de vocabulario se pueden consultar y modificar en la skill `.agents/skills/chef-ia/SKILL.md` y en las decisiones de diseño en `docs/DECISIONES.md`.

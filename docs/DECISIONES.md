@@ -124,18 +124,19 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
 
 ---
 
-### Decisión 13: Memoria de Precios por Hogar, Estimación por Receta y Estudio SEPA / Precios Claros
-- **Contexto**: Los usuarios necesitan tener visibilidad del costo estimado del changuito y de las recetas sin fricción en el súper, recordando los precios cargados previamente por su propia familia.
+### Decisión 14: Verificación Multiusuario en Tiempo Real, Aislamiento RLS y Estrategia de Despliegue
+- **Contexto**: Un hogar compartido involucra múltiples miembros simultáneos (comprando en el súper, planificando en casa) que deben colaborar en tiempo real sin colisiones y sin poder acceder a información de otros hogares.
 - **Decisión**:
-  - **Presupuesto discreto con leyenda "aprox."**: El total estimado en el encabezado de la lista se presenta discretamente con la leyenda fija `${total} aprox.` para no inducir a falsas precisiones.
-  - **Memoria de precios por hogar (`priceMemory.ts`)**: Todo precio ingresado se guarda por nombre normalizado aislado por `household_id`. Al escribir el producto en el drawer, se sugiere automáticamente el último precio pagado con un botón rápido de "Aplicar".
-  - **Estimación de costo por receta**:
-    - Si todos los ingredientes tienen precio recordado, muestra `$X aprox.`.
-    - Si faltan precios, indica con precisión cuántos ingredientes faltan: `Faltan precios de N ingredientes`.
-  - **Viabilidad SEPA / Precios Claros (`docs/PRECIOS.md`)**:
-    - Se constató que el dataset nacional oficial del SEPA (Res. 12/2016) publica entre 10 y 15 millones de filas diarias en archivos masivos ZIP/CSV sin API REST en tiempo real.
-    - Para Junín de los Andes, la cadena censada obligada es La Anónima.
-    - Se definió una arquitectura backend de procesamiento batch nocturno que filtre únicamente las sucursales patagónicas y canasta básica, descartando procesar el archivo completo en el cliente móvil.
+  - **Pruebas automáticas multisesión (`test/multi-user-household.test.ts`)**: Se modelaron dos contextos de navegador concurrentes (Usuario A creador y Usuario B invitado) verificando:
+    1. Creación de hogar y unión por código/enlace directo (?join=CODE).
+    2. Broadcast de eventos `INSERT`, `UPDATE` y sincronización instantánea de compras marcadas en góndola.
+    3. Flujo conjunto de vaciado seguro con borrado lógico (`deleted_at`) y ventana compartida de 10 segundos de deshacer.
+  - **Aislamiento RLS en todas las tablas**:
+    - Se comprobó que usuarios ajenos (Usuario C) reciben colecciones vacías o errores de violación de política RLS al intentar leer o modificar `shopping_items`, `pantry_items`, `licenses` o `payments` de otro hogar.
+    - Se garantizó que los usuarios autenticados NO pueden escribir en `licenses` ni `payments` directamente bajo ninguna circunstancia (solo `service_role`).
+  - **Estrategia de Despliegue (`docs/DEPLOY.md`)**:
+    - Se seleccionó Vercel como plataforma principal recomendada (con Cloudflare Pages y Netlify como alternativas 100% gratuitas), documentando detalladamente la configuración de variables de entorno públicas (`VITE_*`) y reservando los secretos de servidor exclusivamente para Supabase Edge Functions.
+
 
 
 
