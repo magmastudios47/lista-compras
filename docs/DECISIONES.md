@@ -78,3 +78,13 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - La activación se realiza exclusivamente en `mp-webhook` mediante verificación de firma criptográfica HMAC-SHA256 (`x-signature`), consulta a la API de Mercado Pago, validación de estado aprobado y coincidencia exacta de monto esperado.
   - Las tablas `licenses` y `payments` tienen RLS estricto: deniegan cualquier `INSERT`, `UPDATE` o `DELETE` a usuarios autenticados o anónimos (solo service role escribe).
 
+---
+
+### Decisión 9: Fidelidad al Plato y Razonamiento previo (analisis_plato)
+- **Contexto**: El modelo de lenguaje agregaba ingredientes "típicos" automáticos por asociación (por ejemplo agregar papa al pedir puré de zapallo).
+- **Decisión**:
+  - Se introdujo una regla crítica en el prompt del sistema denominada **FIDELIDAD AL PLATO** que prohíbe añadir guarniciones o ingredientes estándar si fueron explícitamente reemplazados por una variante calificada.
+  - Se exige al modelo un paso de razonamiento previo tipo Chain-of-Thought en el campo `analisis_plato` (array de strings descomponiendo componentes antes de listar ingredientes).
+  - El servidor y cliente validan con Zod la presencia de `analisis_plato`.
+  - El generador mock local reproduce fielmente esta descomposición para desarrollo offline y testing determinista.
+

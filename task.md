@@ -56,12 +56,12 @@
   - [x] Búsqueda acotada de repositorios públicos permisivos en los 5 temas
   - [x] Creación de `docs/REFERENCIAS.md` con hallazgos, qué se rescata y qué se descarta
   - [x] Registro de decisiones en `docs/DECISIONES.md`
-- [ ] **Bloque 3: Corregir el Chef (Fidelidad al Plato)**
-  - [ ] Sección FIDELIDAD AL PLATO y campo previo `analisis_plato` en prompt del sistema
-  - [ ] Actualización de esquemas Zod
-  - [ ] Pruebas de regresión "debe incluir" / "no debe incluir" (milanesa puré de zapallo sin papa, etc.)
-  - [ ] Pruebas end-to-end de modos cocinar y sugerir
-  - [ ] Actualización de `docs/chef-quality-report.md`
+- [x] **Bloque 3: Corregir el Chef (Fidelidad al Plato)**
+  - [x] Sección FIDELIDAD AL PLATO y campo previo `analisis_plato` en prompt del sistema
+  - [x] Actualización de esquemas Zod
+  - [x] Pruebas de regresión "debe incluir" / "no debe incluir" (milanesa puré de zapallo sin papa, etc.)
+  - [x] Pruebas end-to-end de modos cocinar y sugerir
+  - [x] Actualización de `docs/chef-quality-report.md`
 - [ ] **Bloque 4: Texto Escrito a Mano (Catálogo >=600 ítems, Ortografía, Categorías)**
   - [ ] Catálogo local offline con >= 600 productos de Argentina con sinónimos y categorías
   - [ ] Pipeline único de procesamiento de texto (separadores, normalización, Levenshtein, calce más largo)

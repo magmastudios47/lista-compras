@@ -54,6 +54,7 @@ export const CookResponseSchema = z.object({
     })
     .nullable()
     .optional(),
+  analisis_plato: z.array(z.string()).default([]),
   ingredientes: z.array(ChefIngredientSchema).default([]),
   advertencias: z.array(z.string()).default([]),
 });
@@ -64,6 +65,7 @@ export const SuggestRecipeSchema = z.object({
   tiempo_minutos: z.number().optional(),
   dificultad: z.enum(['facil', 'media', 'dificil']),
   por_que_conviene: z.string(),
+  analisis_plato: z.array(z.string()).default([]),
   ingredientes: z.array(ChefIngredientSchema),
 });
 

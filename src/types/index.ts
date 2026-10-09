@@ -113,6 +113,7 @@ export interface ChefCookResponse {
     dificultad: 'facil' | 'media' | 'dificil';
     pasos: string[];
   } | null;
+  analisis_plato?: string[];
   ingredientes: ChefIngredient[];
   advertencias: string[];
 }
@@ -123,6 +124,7 @@ export interface ChefSuggestRecipe {
   tiempo_minutos?: number;
   dificultad: 'facil' | 'media' | 'dificil';
   por_que_conviene: string;
+  analisis_plato?: string[];
   ingredientes: ChefIngredient[];
 }
 
