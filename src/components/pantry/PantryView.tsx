@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Category, PantryItem, Unit } from '../../types';
 import { CATEGORIES, UNITS } from '../../lib/constants';
-import { Archive, Plus, Trash2, Sparkles, Mic, Check, X, Search } from 'lucide-react';
+import { Archive, Plus, Trash2, Sparkles, Mic, Check, X, Search, MoreVertical, RotateCcw, AlertTriangle } from 'lucide-react';
 import { processHandwrittenText, saveHouseholdCategoryOverride } from '../../lib/textPipeline';
 import { useHousehold } from '../../context/HouseholdContext';
 
@@ -11,6 +11,13 @@ interface PantryViewProps {
   onAddItem: (name: string, quantity: number | null, unit: Unit | null, category: Category) => Promise<any>;
   onUpdateItem: (id: string, updates: Partial<PantryItem>) => Promise<void>;
   onDeleteItem: (id: string) => Promise<void>;
+  onClearAll?: () => Promise<void>;
+  undoState?: {
+    itemCount: number;
+    secondsLeft: number;
+  } | null;
+  onUndoClear?: () => Promise<void>;
+  onCommitClearNow?: () => Promise<void>;
   onInterpretText: (text: string) => Promise<{ items: Array<{ nombre: string; cantidad: number | null; unidad: Unit | null; categoria: Category }> }>;
   isAiProcessing: boolean;
 }
@@ -21,11 +28,16 @@ export const PantryView: React.FC<PantryViewProps> = ({
   onAddItem,
   onUpdateItem,
   onDeleteItem,
+  onClearAll,
+  undoState,
+  onUndoClear,
+  onCommitClearNow,
   onInterpretText,
   isAiProcessing,
 }) => {
   const { household } = useHousehold();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
   const [isDictateOpen, setIsDictateOpen] = useState(false);
   const [dictateText, setDictateText] = useState('');
@@ -130,9 +142,44 @@ export const PantryView: React.FC<PantryViewProps> = ({
               Lo que ya tenés en la heladera o alacena para que el Chef no te lo haga comprar.
             </p>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            {pantryItems.length} ítems
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              {pantryItems.length} ítems
+            </span>
+
+            {/* Menú de opciones de despensa protegido */}
+            <div className="relative">
+              <button
+                onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
+                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                title="Opciones de despensa"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {isOptionsMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsOptionsMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-9 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 p-1.5 text-xs animate-scale-up">
+                    <button
+                      onClick={() => {
+                        setIsOptionsMenuOpen(false);
+                        if (onClearAll) onClearAll();
+                      }}
+                      disabled={pantryItems.length === 0}
+                      className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-bold"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Vaciar despensa</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Acciones principales: Agregar manual o dictar con IA */}
@@ -383,6 +430,46 @@ export const PantryView: React.FC<PantryViewProps> = ({
                 Guardar en Despensa
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast flotante de Deshacer para despensa (10 segundos) */}
+      {undoState && (
+        <div className="fixed bottom-24 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900/95 text-white dark:bg-slate-800/95 backdrop-blur-md p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 animate-slide-up flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs flex-shrink-0">
+              {undoState.secondsLeft}s
+            </div>
+            <div className="text-xs min-w-0">
+              <p className="font-bold truncate text-slate-100">
+                Despensa vaciada ({undoState.itemCount} {undoState.itemCount === 1 ? 'producto' : 'productos'})
+              </p>
+              <p className="text-slate-400 text-[11px]">
+                Borrado definitivo en {undoState.secondsLeft} segundos
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {onUndoClear && (
+              <button
+                onClick={onUndoClear}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Deshacer</span>
+              </button>
+            )}
+            {onCommitClearNow && (
+              <button
+                onClick={onCommitClearNow}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+                title="Eliminar ya"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       )}

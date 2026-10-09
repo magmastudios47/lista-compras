@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Category, ShoppingItem, Unit } from '../../types';
 import { CATEGORIES } from '../../lib/constants';
-import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react';
+import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag, MoreVertical, X, AlertTriangle } from 'lucide-react';
 import { AddItemDrawer } from './AddItemDrawer';
 
 interface ShoppingListProps {
@@ -13,6 +13,14 @@ interface ShoppingListProps {
   onToggleBought: (id: string) => Promise<boolean>;
   onDeleteItem: (id: string) => Promise<void>;
   onClearBought: () => Promise<void>;
+  onClearAll: () => Promise<void>;
+  undoState: {
+    actionType: 'all' | 'bought';
+    itemCount: number;
+    secondsLeft: number;
+  } | null;
+  onUndoClear: () => Promise<void>;
+  onCommitClearNow?: () => Promise<void>;
   onAddToPantryPrompt: (item: ShoppingItem) => void;
   onOpenChefModal: () => void;
 }
@@ -26,12 +34,17 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
   onToggleBought,
   onDeleteItem,
   onClearBought,
+  onClearAll,
+  undoState,
+  onUndoClear,
+  onCommitClearNow,
   onAddToPantryPrompt,
   onOpenChefModal,
 }) => {
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [showBought, setShowBought] = useState(true);
   const [itemJustBought, setItemJustBought] = useState<ShoppingItem | null>(null);
+  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
 
   // Agrupamiento por categorías
   const groupedPending = CATEGORIES.reduce((acc, cat) => {
@@ -61,15 +74,68 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
 
   return (
     <div className="pb-28 pt-2 px-4 max-w-md mx-auto">
-      {/* Banner de presupuesto estimado si hay precios cargados */}
-      {totalEstimated > 0 && (
-        <div className="mb-3 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto estimado:</span>
-          <span className="font-bold text-slate-800 dark:text-slate-200">
-            ${totalEstimated.toLocaleString('es-AR')} ARS
-          </span>
+      {/* Barra de utilidades: Presupuesto y Menú protegido de acciones */}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        {totalEstimated > 0 ? (
+          <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center gap-2 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto:</span>
+            <span className="font-bold text-slate-800 dark:text-slate-200">
+              ${totalEstimated.toLocaleString('es-AR')} ARS
+            </span>
+          </div>
+        ) : (
+          <div className="text-xs text-slate-400 font-medium">
+            {pendingItems.length} {pendingItems.length === 1 ? 'producto pendiente' : 'productos pendientes'}
+          </div>
+        )}
+
+        {/* Menú de opciones de vaciado protegido para evitar toques accidentales */}
+        <div className="relative">
+          <button
+            onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+            title="Opciones de lista"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+
+          {isOptionsMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsOptionsMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-10 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 p-1.5 text-xs animate-scale-up">
+                <button
+                  onClick={() => {
+                    setIsOptionsMenuOpen(false);
+                    onClearBought();
+                  }}
+                  disabled={boughtItems.length === 0}
+                  className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Vaciar solo comprados</span>
+                </button>
+
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                <button
+                  onClick={() => {
+                    setIsOptionsMenuOpen(false);
+                    onClearAll();
+                  }}
+                  disabled={pendingItems.length === 0 && boughtItems.length === 0}
+                  className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-bold"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Vaciar lista completa</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Lista vacía si no hay ítems */}
       {!loading && pendingItems.length === 0 && boughtItems.length === 0 && (
@@ -276,6 +342,46 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
       >
         <Plus className="w-7 h-7 font-bold" />
       </button>
+
+      {/* Toast flotante de Deshacer (10 segundos) */}
+      {undoState && (
+        <div className="fixed bottom-24 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900/95 text-white dark:bg-slate-800/95 backdrop-blur-md p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 animate-slide-up flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs flex-shrink-0">
+              {undoState.secondsLeft}s
+            </div>
+            <div className="text-xs min-w-0">
+              <p className="font-bold truncate text-slate-100">
+                {undoState.actionType === 'all'
+                  ? `Lista vaciada (${undoState.itemCount} ${undoState.itemCount === 1 ? 'producto' : 'productos'})`
+                  : `Comprados vaciados (${undoState.itemCount})`}
+              </p>
+              <p className="text-slate-400 text-[11px]">
+                Borrado definitivo en {undoState.secondsLeft} segundos
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={onUndoClear}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Deshacer</span>
+            </button>
+            {onCommitClearNow && (
+              <button
+                onClick={onCommitClearNow}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+                title="Eliminar ya"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Drawer para agregar */}
       <AddItemDrawer

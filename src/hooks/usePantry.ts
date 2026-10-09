@@ -225,12 +225,115 @@ export function usePantry() {
     []
   );
 
+  // Estado de deshacer para vaciado de despensa
+  const [undoPantryState, setUndoPantryState] = useState<{
+    itemCount: number;
+    secondsLeft: number;
+    clearedIds: string[];
+  } | null>(null);
+
+  // Vaciar toda la despensa con borrado lógico inmediato y 10s para deshacer
+  const clearAllPantry = useCallback(async (): Promise<void> => {
+    const toClear = pantryItems.filter((p) => !p.deleted_at);
+    if (toClear.length === 0) return;
+
+    const ids = toClear.map((p) => p.id);
+    const now = new Date().toISOString();
+
+    // 1. Borrado lógico inmediato
+    setPantryItems((prev) => {
+      const next = prev.map((it) => (ids.includes(it.id) ? { ...it, deleted_at: now } : it));
+      offlineStorage.savePantryItems(next);
+      return next;
+    });
+
+    // 2. Sincronizar en Supabase si está online
+    if (isConfigured) {
+      await supabase.from('pantry_items').update({ deleted_at: now }).in('id', ids);
+    }
+
+    // 3. Iniciar cuenta regresiva de 10 segundos
+    setUndoPantryState({
+      itemCount: ids.length,
+      secondsLeft: 10,
+      clearedIds: ids,
+    });
+  }, [pantryItems]);
+
+  // Deshacer el vaciado de despensa
+  const undoClearPantry = useCallback(async (): Promise<void> => {
+    if (!undoPantryState) return;
+    const { clearedIds } = undoPantryState;
+
+    setPantryItems((prev) => {
+      const next = prev.map((it) => (clearedIds.includes(it.id) ? { ...it, deleted_at: null } : it));
+      offlineStorage.savePantryItems(next);
+      return next;
+    });
+
+    if (isConfigured) {
+      await supabase.from('pantry_items').update({ deleted_at: null }).in('id', clearedIds);
+    }
+
+    setUndoPantryState(null);
+  }, [undoPantryState]);
+
+  // Confirmar eliminación definitiva inmediata
+  const commitClearPantryNow = useCallback(async (): Promise<void> => {
+    if (!undoPantryState) return;
+    const { clearedIds } = undoPantryState;
+
+    setPantryItems((prev) => {
+      const next = prev.filter((it) => !clearedIds.includes(it.id));
+      offlineStorage.savePantryItems(next);
+      return next;
+    });
+
+    if (isConfigured) {
+      await supabase.from('pantry_items').delete().in('id', clearedIds);
+    } else {
+      clearedIds.forEach((id) => {
+        offlineStorage.enqueueMutation({
+          table: 'pantry_items',
+          action: 'delete',
+          payload: { id },
+        });
+      });
+    }
+
+    setUndoPantryState(null);
+  }, [undoPantryState]);
+
+  // Manejar el temporizador de 10 segundos
+  useEffect(() => {
+    if (!undoPantryState) return;
+
+    if (undoPantryState.secondsLeft <= 0) {
+      commitClearPantryNow();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setUndoPantryState((curr) => (curr ? { ...curr, secondsLeft: curr.secondsLeft - 1 } : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [undoPantryState, commitClearPantryNow]);
+
+  // Ítems activos (sin borrado lógico)
+  const activePantryItems = pantryItems.filter((p) => !p.deleted_at);
+
   return {
-    pantryItems,
+    pantryItems: activePantryItems,
+    allPantryItemsWithDeleted: pantryItems,
     loading,
+    undoPantryState,
     addPantryItem,
     addMultiplePantryItems,
     updatePantryItem,
     deletePantryItem,
+    clearAllPantry,
+    undoClearPantry,
+    commitClearPantryNow,
   };
 }

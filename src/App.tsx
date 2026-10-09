@@ -41,18 +41,26 @@ export const App: React.FC = () => {
     pendingItems,
     boughtItems,
     loading: loadingShopping,
+    undoState: undoShoppingState,
     addItem,
     toggleBought,
     deleteItem,
     clearBoughtItems,
+    clearAllItems,
+    undoClearShopping,
+    commitClearShoppingNow,
   } = useShoppingList();
 
   const {
     pantryItems,
     loading: loadingPantry,
+    undoPantryState,
     addPantryItem,
     updatePantryItem,
     deletePantryItem,
+    clearAllPantry,
+    undoClearPantry,
+    commitClearPantryNow,
   } = usePantry();
 
   const { interpretPantry, loading: isAiProcessing } = useChefAi();
@@ -125,6 +133,10 @@ export const App: React.FC = () => {
             onToggleBought={toggleBought}
             onDeleteItem={deleteItem}
             onClearBought={clearBoughtItems}
+            onClearAll={clearAllItems}
+            undoState={undoShoppingState}
+            onUndoClear={undoClearShopping}
+            onCommitClearNow={commitClearShoppingNow}
             onAddToPantryPrompt={handlePromptAddToPantry}
             onOpenChefModal={handleOpenChef}
           />
@@ -137,6 +149,10 @@ export const App: React.FC = () => {
             onAddItem={addPantryItem}
             onUpdateItem={updatePantryItem}
             onDeleteItem={deletePantryItem}
+            onClearAll={clearAllPantry}
+            undoState={undoPantryState}
+            onUndoClear={undoClearPantry}
+            onCommitClearNow={commitClearPantryNow}
             onInterpretText={handleInterpretPantryText}
             isAiProcessing={isAiProcessing}
           />

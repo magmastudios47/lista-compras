@@ -40,6 +40,7 @@ export interface ShoppingItem {
   estimated_price?: number | null;
   created_by?: string | null;
   created_by_name?: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +53,7 @@ export interface PantryItem {
   quantity: number | null;
   unit: Unit | null;
   category: Category;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }

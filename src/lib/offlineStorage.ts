@@ -9,82 +9,86 @@ export interface QueuedMutation {
   timestamp: number;
 }
 
+const memoryStorage = new Map<string, string>();
+
+function getStorageItem(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+  } catch {}
+  return memoryStorage.get(key) || null;
+}
+
+function setStorageItem(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  } catch {}
+  memoryStorage.set(key, value);
+}
+
+function removeStorageItem(key: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  } catch {}
+  memoryStorage.delete(key);
+}
+
 export const offlineStorage = {
   // Shopping Items
   getShoppingItems(): ShoppingItem[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.LOCAL_ITEMS);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    const data = getStorageItem(STORAGE_KEYS.LOCAL_ITEMS);
+    return data ? JSON.parse(data) : [];
   },
 
   saveShoppingItems(items: ShoppingItem[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.LOCAL_ITEMS, JSON.stringify(items));
-    } catch (e) {
-      console.error('Error guardando shopping items en storage:', e);
-    }
+    setStorageItem(STORAGE_KEYS.LOCAL_ITEMS, JSON.stringify(items));
   },
 
   // Pantry Items
   getPantryItems(): PantryItem[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.LOCAL_PANTRY);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    const data = getStorageItem(STORAGE_KEYS.LOCAL_PANTRY);
+    return data ? JSON.parse(data) : [];
   },
 
   savePantryItems(items: PantryItem[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.LOCAL_PANTRY, JSON.stringify(items));
-    } catch (e) {
-      console.error('Error guardando despensa en storage:', e);
-    }
+    setStorageItem(STORAGE_KEYS.LOCAL_PANTRY, JSON.stringify(items));
   },
 
   // Mutation Queue para sincronización offline
   getMutationQueue(): QueuedMutation[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.MUTATION_QUEUE);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    const data = getStorageItem(STORAGE_KEYS.MUTATION_QUEUE);
+    return data ? JSON.parse(data) : [];
   },
 
   enqueueMutation(mutation: Omit<QueuedMutation, 'id' | 'timestamp'>): void {
     const queue = this.getMutationQueue();
     const newEntry: QueuedMutation = {
       ...mutation,
-      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
       timestamp: Date.now(),
     };
     queue.push(newEntry);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MUTATION_QUEUE, JSON.stringify(queue));
-    } catch (e) {
-      console.error('Error encolando mutación:', e);
-    }
+    setStorageItem(STORAGE_KEYS.MUTATION_QUEUE, JSON.stringify(queue));
   },
 
   clearMutation(mutationId: string): void {
     const queue = this.getMutationQueue().filter((m) => m.id !== mutationId);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MUTATION_QUEUE, JSON.stringify(queue));
-    } catch (e) {
-      console.error('Error limpiando mutación:', e);
-    }
+    setStorageItem(STORAGE_KEYS.MUTATION_QUEUE, JSON.stringify(queue));
   },
 
   clearAllMutations(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.MUTATION_QUEUE);
-    } catch (e) {
-      console.error('Error vaciando cola de mutaciones:', e);
-    }
+    removeStorageItem(STORAGE_KEYS.MUTATION_QUEUE);
+  },
+
+  clearAllStorage(): void {
+    removeStorageItem(STORAGE_KEYS.LOCAL_ITEMS);
+    removeStorageItem(STORAGE_KEYS.LOCAL_PANTRY);
+    removeStorageItem(STORAGE_KEYS.MUTATION_QUEUE);
+    memoryStorage.clear();
   },
 };

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { isConfigured, INITIAL_SHOPPING_SEED, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { normalizeString, singularizeIngredient } from '../lib/normalizer';
+import { applySoftDelete, restoreSoftDeleted, commitPermanentDelete, filterActiveItems } from '../lib/clearUndoManager';
 import confetti from 'canvas-confetti';
 
 export function useShoppingList() {
@@ -281,19 +282,106 @@ export function useShoppingList() {
     [isDemoMode]
   );
 
-  // Limpiar todos los comprados
+  // Estado de deshacer (vaciar lista o comprados)
+  const [undoState, setUndoState] = useState<{
+    actionType: 'all' | 'bought';
+    itemCount: number;
+    secondsLeft: number;
+    clearedIds: string[];
+  } | null>(null);
+
+  // Limpiar todos los comprados con borrado lógico inmediato y 10s para deshacer
   const clearBoughtItems = useCallback(async (): Promise<void> => {
-    const boughtIds = items.filter((i) => i.is_bought).map((i) => i.id);
+    const toClear = items.filter((i) => !i.deleted_at && i.is_bought);
+    if (toClear.length === 0) return;
+
+    const ids = toClear.map((i) => i.id);
+    const now = new Date().toISOString();
+
+    // 1. Borrado lógico inmediato en memoria y almacenamiento local
     setItems((prev) => {
-      const next = prev.filter((it) => !it.is_bought);
+      const next = prev.map((it) => (ids.includes(it.id) ? { ...it, deleted_at: now } : it));
       offlineStorage.saveShoppingItems(next);
       return next;
     });
 
-    if (!isDemoMode && isConfigured && boughtIds.length > 0) {
-      await supabase.from('shopping_items').delete().in('id', boughtIds);
+    // 2. Sincronizar borrado lógico en Supabase si está online
+    if (!isDemoMode && isConfigured) {
+      await supabase.from('shopping_items').update({ deleted_at: now }).in('id', ids);
+    }
+
+    // 3. Iniciar estado de cuenta regresiva de 10 segundos
+    setUndoState({
+      actionType: 'bought',
+      itemCount: ids.length,
+      secondsLeft: 10,
+      clearedIds: ids,
+    });
+  }, [items, isDemoMode]);
+
+  // Limpiar toda la lista con borrado lógico inmediato y 10s para deshacer
+  const clearAllItems = useCallback(async (): Promise<void> => {
+    const toClear = items.filter((i) => !i.deleted_at);
+    if (toClear.length === 0) return;
+
+    const ids = toClear.map((i) => i.id);
+    const now = new Date().toISOString();
+
+    // 1. Borrado lógico inmediato
+    setItems((prev) => {
+      const next = prev.map((it) => (ids.includes(it.id) ? { ...it, deleted_at: now } : it));
+      offlineStorage.saveShoppingItems(next);
+      return next;
+    });
+
+    // 2. Sincronizar borrado lógico en Supabase si está online
+    if (!isDemoMode && isConfigured) {
+      await supabase.from('shopping_items').update({ deleted_at: now }).in('id', ids);
+    }
+
+    // 3. Iniciar estado de cuenta regresiva de 10 segundos
+    setUndoState({
+      actionType: 'all',
+      itemCount: ids.length,
+      secondsLeft: 10,
+      clearedIds: ids,
+    });
+  }, [items, isDemoMode]);
+
+  // Deshacer el vaciado
+  const undoClearShopping = useCallback(async (): Promise<void> => {
+    if (!undoState) return;
+    const { clearedIds } = undoState;
+
+    // Restaurar borrado lógico
+    setItems((prev) => {
+      const next = prev.map((it) => (clearedIds.includes(it.id) ? { ...it, deleted_at: null } : it));
+      offlineStorage.saveShoppingItems(next);
+      return next;
+    });
+
+    if (!isDemoMode && isConfigured) {
+      await supabase.from('shopping_items').update({ deleted_at: null }).in('id', clearedIds);
+    }
+
+    setUndoState(null);
+  }, [undoState, isDemoMode]);
+
+  // Confirmar eliminación definitiva inmediata
+  const commitClearShoppingNow = useCallback(async (): Promise<void> => {
+    if (!undoState) return;
+    const { clearedIds } = undoState;
+
+    setItems((prev) => {
+      const next = prev.filter((it) => !clearedIds.includes(it.id));
+      offlineStorage.saveShoppingItems(next);
+      return next;
+    });
+
+    if (!isDemoMode && isConfigured) {
+      await supabase.from('shopping_items').delete().in('id', clearedIds);
     } else {
-      boughtIds.forEach((id) => {
+      clearedIds.forEach((id) => {
         offlineStorage.enqueueMutation({
           table: 'shopping_items',
           action: 'delete',
@@ -301,20 +389,46 @@ export function useShoppingList() {
         });
       });
     }
-  }, [items, isDemoMode]);
 
-  const pendingItems = items.filter((i) => !i.is_bought);
-  const boughtItems = items.filter((i) => i.is_bought);
+    setUndoState(null);
+  }, [undoState, isDemoMode]);
+
+  // Manejar el temporizador de 10 segundos para eliminación definitiva
+  useEffect(() => {
+    if (!undoState) return;
+
+    if (undoState.secondsLeft <= 0) {
+      // Tiempo cumplido: ejecutar eliminación definitiva
+      commitClearShoppingNow();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setUndoState((curr) => (curr ? { ...curr, secondsLeft: curr.secondsLeft - 1 } : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [undoState, commitClearShoppingNow]);
+
+  // Ítems activos (sin borrado lógico)
+  const activeItems = items.filter((i) => !i.deleted_at);
+  const pendingItems = activeItems.filter((i) => !i.is_bought);
+  const boughtItems = activeItems.filter((i) => i.is_bought);
 
   return {
-    items,
+    items: activeItems,
+    allItemsWithDeleted: items,
     pendingItems,
     boughtItems,
     loading,
+    undoState,
     addItem,
     toggleBought,
     updateItem,
     deleteItem,
     clearBoughtItems,
+    clearAllItems,
+    undoClearShopping,
+    commitClearShoppingNow,
   };
 }

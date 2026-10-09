@@ -69,10 +69,10 @@
   - [x] Asignación automática de categorías y memoria de cambios por hogar
   - [x] Cruce aproximado entre chef y despensa
   - [x] Suite de pruebas de ortografía y segmentación
-- [ ] **Bloque 5: Botones de Vaciar con Deshacer**
-  - [ ] Botones para vaciar lista, vaciar despensa y vaciar comprados con protección
-  - [ ] Borrado lógico inmediato y botón "Deshacer" por 10 segundos
-  - [ ] Sincronización en tiempo real y offline
+- [x] **Bloque 5: Botones de Vaciar con Deshacer**
+  - [x] Botones para vaciar lista, vaciar despensa y vaciar comprados con protección
+  - [x] Borrado lógico inmediato y botón "Deshacer" por 10 segundos
+  - [x] Sincronización en tiempo real y offline
 - [ ] **Bloque 6: Menú Semanal Mejorado**
   - [ ] Panel de comidas por día (desayuno, almuerzo, merienda, cena) y atajo global
   - [ ] Objetivos / perfiles de usuario, disclaimer de salud fijo

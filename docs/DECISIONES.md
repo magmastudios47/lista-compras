@@ -100,3 +100,17 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - Se introdujo el modo `interpretar_items` (reemplazando a `interpretar_despensa`) con cuota mensual dedicada e independiente de 200 consultas/mes por hogar, rate limit propio y caché global.
   - El cruce entre el Chef y la despensa (`discountEngine.ts`) utiliza comparación aproximada para tolerar plurales o diferencias menores de tipeo.
 
+---
+
+### Decisión 11: Botones de Vaciado Protegidos, Borrado Lógico Inmediato y Deshacer de 10 Segundos
+- **Contexto**: Eliminar la lista de compras o la despensa por error es frustrante para una familia en el súper. Se requería evitar toques accidentales y permitir deshacer inmediatamente durante 10 segundos, tanto en línea como sin conexión.
+- **Decisión**:
+  - **Ubicación protegida**: Los botones "Vaciar lista completa" y "Vaciar solo comprados" en la lista de compras, así como "Vaciar despensa", se ubicaron dentro de menús de acciones secundarios (`MoreVertical`) protegidos contra toques fortuitos del pulgar.
+  - **Borrado lógico instantáneo**: Al presionar la acción, los elementos se ocultan inmediatamente en la interfaz marcando `deleted_at: ISOString`. Si hay conexión a Supabase, se propaga el update de `deleted_at` para sincronizar el vaciado en tiempo real con todos los dispositivos del hogar.
+  - **Toast flotante con cuenta regresiva de 10s**: Aparece un toast visible con badge de segundos restantes (`10s`...`0s`), descripción de la cantidad de productos y un botón destacado "Deshacer".
+  - **Restauración o eliminación física**:
+    - Si el usuario presiona "Deshacer" dentro de los 10 segundos, `deleted_at` se restablece a `null` de inmediato y todos los elementos vuelven a su posición previa sin pérdida de datos.
+    - Si expiran los 10 segundos sin deshacer, se ejecuta la eliminación definitiva (`DELETE`) en la base de datos y en el almacenamiento local.
+  - **Soporte Offline**: `offlineStorage` maneja `deleted_at` en memoria y persistencia local universal; si se confirma la eliminación sin conexión, se encolan mutaciones de tipo `delete` en la cola de sincronización.
+
+
