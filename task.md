@@ -52,10 +52,10 @@
   - [x] Tabla de tipos de cambio con control de sanidad y límites centralizados por plan
   - [x] Script seguro en `SETUP.md` para otorgar plan con service role a hogares de prueba
   - [x] Tests de webhook (firma válida/inválida, monto incorrecto, duplicados, RLS no modificable)
-- [ ] **Bloque 2: Investigación de Ideas en GitHub**
-  - [ ] Búsqueda acotada de repositorios públicos permisivos en los 5 temas
-  - [ ] Creación de `docs/REFERENCIAS.md` con hallazgos, qué se rescata y qué se descarta
-  - [ ] Registro de decisiones en `docs/DECISIONES.md`
+- [x] **Bloque 2: Investigación de Ideas en GitHub**
+  - [x] Búsqueda acotada de repositorios públicos permisivos en los 5 temas
+  - [x] Creación de `docs/REFERENCIAS.md` con hallazgos, qué se rescata y qué se descarta
+  - [x] Registro de decisiones en `docs/DECISIONES.md`
 - [ ] **Bloque 3: Corregir el Chef (Fidelidad al Plato)**
   - [ ] Sección FIDELIDAD AL PLATO y campo previo `analisis_plato` en prompt del sistema
   - [ ] Actualización de esquemas Zod
