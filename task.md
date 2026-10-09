@@ -43,15 +43,15 @@
   - [x] Ejecución de tests y build de línea base
   - [x] Inicialización de repositorio local Git y `.gitignore`
   - [x] Creación de `docs/PENDIENTES.md` y commit inicial
-- [ ] **Bloque 1: Pagos con Mercado Pago (Servidor, Webhook con Firma, RLS)**
-  - [ ] Eliminación de toda activación de plan en cliente / modo simulado
-  - [ ] Tablas SQL `plans`, `licenses`, `payments`, `exchange_rates` con RLS estricto (solo lectura para miembros, solo service role para escritura)
-  - [ ] Edge Function `create-checkout` (cálculo de monto en servidor, external_reference único, payment pendiente)
-  - [ ] Edge Function `mp-webhook` (verificación cabecera `x-signature` con secreto, consulta a API MP, idempotencia, coincidencia de monto/moneda)
-  - [ ] Páginas de retorno pasivas (solo consulta en tiempo real, no activan)
-  - [ ] Tabla de tipos de cambio con control de sanidad y límites centralizados por plan
-  - [ ] Script seguro en `SETUP.md` para otorgar plan con service role a hogares de prueba
-  - [ ] Tests de webhook (firma válida/inválida, monto incorrecto, duplicados, RLS no modificable)
+- [x] **Bloque 1: Pagos con Mercado Pago (Servidor, Webhook con Firma, RLS)**
+  - [x] Eliminación de toda activación de plan en cliente / modo simulado
+  - [x] Tablas SQL `plans`, `licenses`, `payments`, `exchange_rates` con RLS estricto (solo lectura para miembros, solo service role para escritura)
+  - [x] Edge Function `create-checkout` (cálculo de monto en servidor, external_reference único, payment pendiente)
+  - [x] Edge Function `mp-webhook` (verificación cabecera `x-signature` con secreto, consulta a API MP, idempotencia, coincidencia de monto/moneda)
+  - [x] Páginas de retorno pasivas (solo consulta en tiempo real, no activan)
+  - [x] Tabla de tipos de cambio con control de sanidad y límites centralizados por plan
+  - [x] Script seguro en `SETUP.md` para otorgar plan con service role a hogares de prueba
+  - [x] Tests de webhook (firma válida/inválida, monto incorrecto, duplicados, RLS no modificable)
 - [ ] **Bloque 2: Investigación de Ideas en GitHub**
   - [ ] Búsqueda acotada de repositorios públicos permisivos en los 5 temas
   - [ ] Creación de `docs/REFERENCIAS.md` con hallazgos, qué se rescata y qué se descarta

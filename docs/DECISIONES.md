@@ -55,3 +55,26 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
 - **Decisión**:
   - El asistente de instalación PWA detecta dinámicamente si el navegador es iOS Safari y muestra un modal ilustrado interactivo indicando: "Paso 1: Tocá el botón Compartir (cuadrado con flecha) -> Paso 2: Elegí 'Agregar a pantalla de inicio' -> Paso 3: Abrí la app desde tu pantalla de inicio para recibir avisos de tu familia".
   - En Android y Desktop, utiliza el evento `beforeinstallprompt` automático con un botón destacado.
+
+---
+
+### Decisión 7: Límites y Prestaciones Centralizadas por Plan
+- **Contexto**: Los límites de consultas y prestaciones no deben dispersarse en el código del cliente ni alterarse sin trazabilidad.
+- **Decisión**:
+  - Se centralizan en la tabla `plans`:
+    - **Free (Sin pago)**: 5 consultas del chef/mes, hasta 3 integrantes.
+    - **Base**: 10 USD (o equivalente en ARS), 40 consultas del chef/mes, hasta 10 integrantes.
+    - **Premium**: 20 USD, 150 consultas del chef/mes, hasta 99 integrantes, menú semanal y seguimiento de precios.
+    - **Upgrade Base a Premium**: 10 USD (diferencia exacta calculada en servidor).
+  - El límite mensual se aplica en el servidor en la Edge Function `chef-ai` y en el trigger de base de datos.
+
+---
+
+### Decisión 8: Arquitectura de Pagos Inviolable (Servidor Único)
+- **Contexto**: El cliente no puede otorgar ni activar planes bajo ningún concepto.
+- **Decisión**:
+  - Se eliminó cualquier mock o simulación en cliente que active planes.
+  - El cliente solo crea una orden en `create-checkout` y redirige a Mercado Pago.
+  - La activación se realiza exclusivamente en `mp-webhook` mediante verificación de firma criptográfica HMAC-SHA256 (`x-signature`), consulta a la API de Mercado Pago, validación de estado aprobado y coincidencia exacta de monto esperado.
+  - Las tablas `licenses` y `payments` tienen RLS estricto: deniegan cualquier `INSERT`, `UPDATE` o `DELETE` a usuarios autenticados o anónimos (solo service role escribe).
+

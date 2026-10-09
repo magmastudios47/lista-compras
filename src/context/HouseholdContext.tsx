@@ -1,20 +1,29 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Household, HouseholdMember } from '../types';
 import { useAuth } from './AuthContext';
 import { isConfigured, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
-import { MAX_CHEF_MONTHLY_FREE, STORAGE_KEYS } from '../lib/constants';
+import { STORAGE_KEYS } from '../lib/constants';
+
+export type PlanType = 'free' | 'base' | 'premium';
+
+export interface LicenseInfo {
+  plan_id: PlanType;
+  status: 'active' | 'expired' | 'canceled';
+  activated_at?: string;
+}
 
 interface HouseholdContextType {
   household: Household | null;
   members: HouseholdMember[];
   loading: boolean;
   remainingQueries: number;
+  currentPlan: PlanType;
   isPremium: boolean;
   createHousehold: (name: string) => Promise<Household>;
   joinHouseholdByCode: (code: string) => Promise<{ success: boolean; message: string }>;
   getWhatsAppInviteUrl: () => string;
   incrementChefUsage: () => void;
-  activatePremium: () => void;
+  refreshLicense: () => Promise<void>;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
@@ -24,8 +33,35 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isPremium, setIsPremium] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('free');
   const [chefUsedThisMonth, setChefUsedThisMonth] = useState(0);
+
+  // Consulta la licencia activa exclusivamente desde la base de datos
+  const fetchLicense = useCallback(async (householdId: string) => {
+    if (!isConfigured || isDemoMode) {
+      // En modo sin configurar, el plan es estrictamente 'free'
+      setCurrentPlan('free');
+      return;
+    }
+
+    try {
+      const { data: licenseData, error } = await supabase
+        .from('licenses')
+        .select('plan_id, status')
+        .eq('household_id', householdId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (!error && licenseData) {
+        setCurrentPlan(licenseData.plan_id as PlanType);
+      } else {
+        setCurrentPlan('free');
+      }
+    } catch (err) {
+      console.warn('Error consultando licencia:', err);
+      setCurrentPlan('free');
+    }
+  }, [isDemoMode]);
 
   // Carga inicial de hogar
   useEffect(() => {
@@ -70,6 +106,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           joined_at: new Date().toISOString(),
         },
       ]);
+      setCurrentPlan('free');
       setLoading(false);
       return;
     }
@@ -98,16 +135,8 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             .eq('household_id', current.id);
           if (allMembers) setMembers(allMembers as HouseholdMember[]);
 
-          // Cargar licencia
-          const { data: licenseData } = await supabase
-            .from('household_licenses')
-            .select('*')
-            .eq('household_id', current.id)
-            .maybeSingle();
-
-          if (licenseData?.plan_type === 'lifetime_premium') {
-            setIsPremium(true);
-          }
+          // Cargar licencia desde el servidor
+          await fetchLicense(current.id);
         } else {
           // Si no tiene hogar aún, auto-crear uno por defecto
           const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -124,6 +153,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           if (!createErr && newHh) {
             setHousehold(newHh);
             setChefUsedThisMonth(0);
+            await fetchLicense(newHh.id);
           }
         }
       } catch (e) {
@@ -134,7 +164,30 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     fetchHousehold();
-  }, [user, isDemoMode]);
+  }, [user, isDemoMode, fetchLicense]);
+
+  // Suscripción Realtime a cambios en la tabla licenses para actualizar el plan instantáneamente al confirmarse el webhook
+  useEffect(() => {
+    if (!household || !isConfigured || isDemoMode) return;
+
+    const licenseChannel = supabase
+      .channel(`license_changes_${household.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'licenses', filter: `household_id=eq.${household.id}` },
+        (payload) => {
+          if (payload.new && (payload.new as any).status === 'active') {
+            const updatedPlan = (payload.new as any).plan_id as PlanType;
+            setCurrentPlan(updatedPlan);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(licenseChannel);
+    };
+  }, [household?.id, isDemoMode]);
 
   // Verificar código de invitación en la URL (?join=CODE)
   useEffect(() => {
@@ -143,7 +196,6 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (joinCode && user) {
       joinHouseholdByCode(joinCode).then((res) => {
         if (res.success) {
-          // Limpiar el parámetro de la URL limpiamente sin recargar
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       });
@@ -159,11 +211,12 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         name,
         invite_code: newCode,
         currency: 'ARS',
-        monthly_chef_limit: MAX_CHEF_MONTHLY_FREE,
+        monthly_chef_limit: 5, // Plan free: 5 consultas por mes
         chef_queries_used_month: 0,
         created_at: new Date().toISOString(),
       };
       setHousehold(newHh);
+      setCurrentPlan('free');
       localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(newHh));
       return newHh;
     }
@@ -180,6 +233,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (error) throw error;
     setHousehold(data);
+    await fetchLicense(data.id);
     return data;
   };
 
@@ -220,6 +274,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (joinErr) throw joinErr;
 
       setHousehold(targetHh);
+      await fetchLicense(targetHh.id);
       return { success: true, message: `¡Te uniste a ${targetHh.name}!` };
     } catch (e: any) {
       return { success: false, message: e.message || 'Error al unirse al hogar.' };
@@ -248,19 +303,22 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  const activatePremium = () => {
-    setIsPremium(true);
+  const refreshLicense = async () => {
     if (household) {
-      const updated = { ...household, monthly_chef_limit: 9999 };
-      setHousehold(updated);
-      if (isDemoMode) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(updated));
-      }
+      await fetchLicense(household.id);
     }
   };
 
-  const effectiveLimit = isPremium ? 9999 : (household?.monthly_chef_limit || MAX_CHEF_MONTHLY_FREE);
+  // Límites centralizados por plan: Free 5, Base 40, Premium 150
+  const planLimits: Record<PlanType, number> = {
+    free: 5,
+    base: 40,
+    premium: 150,
+  };
+
+  const effectiveLimit = planLimits[currentPlan] || 5;
   const remainingQueries = Math.max(0, effectiveLimit - chefUsedThisMonth);
+  const isPremium = currentPlan === 'premium';
 
   return (
     <HouseholdContext.Provider
@@ -269,12 +327,13 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         members,
         loading,
         remainingQueries,
+        currentPlan,
         isPremium,
         createHousehold,
         joinHouseholdByCode,
         getWhatsAppInviteUrl,
         incrementChefUsage,
-        activatePremium,
+        refreshLicense,
       }}
     >
       {children}

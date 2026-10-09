@@ -66,18 +66,55 @@ Gemini es la inteligencia artificial que le da vida al Chef. Durante la etapa be
 
 ## Paso 3: Configurar Mercado Pago (Pago Único por Hogar)
 
-Para que los hogares puedan pagar la licencia de por vida en pesos argentinos (ARS):
+Para que los hogares puedan pagar la licencia en pesos argentinos (ARS) mediante Checkout Pro:
 
 1. Entrá a [https://www.mercadopago.com.ar/developers](https://www.mercadopago.com.ar/developers) e iniciá sesión con tu cuenta de Mercado Pago.
 2. Andá a **"Tus integraciones"** -> **"Crear aplicación"**.
 3. Poné de nombre `Lista Compars` y elegí la opción de cobros en Checkout Pro / Web.
-4. En el panel de la aplicación, entrá a **"Credenciales de prueba"** (para probar sin plata real) o **"Credenciales de producción"**.
-5. Copiá el **Access Token** y la **Public Key**, y colocalos en tu archivo `.env`:
+4. En el panel de la aplicación, entrá a **"Credenciales de prueba"** (Sandbox) y copiá el **Access Token** y la **Public Key**.
+5. En la sección **"Webhooks"** / **"Notificaciones IPN"**:
+   - Configurá la URL de tu Edge Function: `https://<tu-proyecto>.supabase.co/functions/v1/mp-webhook`
+   - *(Para probar en local en tu computadora antes de desplegar, podés usar un túnel gratuito como `ngrok http 54321` o Cloudflare Tunnel).*
+   - Copiá la **Clave secreta del Webhook** generada por Mercado Pago.
+6. Guardá estas variables en tu `.env` (y como secrets en Supabase con `supabase secrets set`):
    ```env
-   MERCADOPAGO_ACCESS_TOKEN=APP_USR-...
-   MERCADOPAGO_PUBLIC_KEY=APP_USR-...
-   ARS_USD_RATE=1350
+   MERCADOPAGO_ACCESS_TOKEN=APP_USR-tu_access_token_de_prueba
+   MERCADOPAGO_PUBLIC_KEY=APP_USR-tu_public_key_de_prueba
+   MERCADOPAGO_WEBHOOK_SECRET=tu_secreto_de_firma_webhook
    ```
+
+### Cómo actualizar la cotización del dólar (USD/ARS)
+La tabla `exchange_rates` en Supabase almacena el valor de referencia con control de sanidad (entre $500 y $10.000 ARS):
+```sql
+UPDATE public.exchange_rates
+SET rate = 1420.00, updated_at = now()
+WHERE currency_from = 'USD' AND currency_to = 'ARS';
+```
+
+### Cómo asignar un plan manualmente a familiares o pruebas (Sin pagar)
+Como el cliente tiene prohibido modificar planes por seguridad (RLS), para activar el plan Base o Premium a tu familia o a vos mismo, abrí el **SQL Editor** de Supabase y ejecutá:
+```sql
+-- Reemplazá el ID de tu hogar (podés buscarlo con: SELECT id, name FROM public.households;)
+DO $$
+DECLARE
+    v_household_id UUID := 'AQUI-EL-UUID-DE-TU-HOGAR';
+    v_plan TEXT := 'premium'; -- 'base' o 'premium'
+BEGIN
+    -- 1. Actualizar o insertar la licencia
+    INSERT INTO public.licenses (household_id, plan_id, status, activated_at, updated_at)
+    VALUES (v_household_id, v_plan, 'active', now(), now())
+    ON CONFLICT (household_id) DO UPDATE SET
+        plan_id = EXCLUDED.plan_id,
+        status = 'active',
+        updated_at = now();
+
+    -- 2. Actualizar el límite mensual de consultas del chef en el hogar
+    UPDATE public.households
+    SET monthly_chef_limit = CASE WHEN v_plan = 'premium' THEN 150 ELSE 40 END
+    WHERE id = v_household_id;
+END $$;
+```
+Al ejecutar esa consulta, el hogar pasará inmediatamente a tener el plan asignado con todas sus funciones habilitadas.
 
 ---
 

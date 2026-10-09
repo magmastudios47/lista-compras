@@ -9,6 +9,7 @@ import { HouseholdModal } from './components/household/HouseholdModal';
 import { InstallPromptModal } from './components/pwa/InstallPromptModal';
 import { OnboardingModal } from './components/common/OnboardingModal';
 import { MercadoPagoModal } from './components/payment/MercadoPagoModal';
+import { PaymentReturnView } from './components/payment/PaymentReturnView';
 import { OfflineBanner } from './components/common/OfflineBanner';
 import { useShoppingList } from './hooks/useShoppingList';
 import { usePantry } from './hooks/usePantry';
@@ -20,6 +21,10 @@ import { ShoppingItem } from './types';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('lista');
+  const [isReturnView, setIsReturnView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('payment_status') || params.has('status');
+  });
 
   // Modales
   const [isChefModalOpen, setIsChefModalOpen] = useState(false);
@@ -84,6 +89,17 @@ export const App: React.FC = () => {
   const handleOpenChef = () => {
     setIsChefModalOpen(true);
   };
+
+  if (isReturnView) {
+    return (
+      <PaymentReturnView
+        onBackToApp={() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setIsReturnView(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-chef-500 selection:text-white">
