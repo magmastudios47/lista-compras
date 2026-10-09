@@ -182,7 +182,36 @@ export interface DiscountComparisonResult {
 
 export interface WeeklyMealDay {
   dia: string;
+  desayuno?: string;
   almuerzo?: string;
+  merienda?: string;
   cena?: string;
   personas: number;
 }
+
+export type MealType = 'desayuno' | 'almuerzo' | 'merienda' | 'cena';
+
+export interface MenuItemMeal {
+  tipo: MealType;
+  nombre: string;
+  porciones: number;
+  tiempo_minutos?: number;
+  por_que_encaja?: string;
+  analisis_plato?: string[];
+  ingredientes: ChefIngredient[];
+}
+
+export interface MenuDay {
+  dia: string;
+  comidas: MenuItemMeal[];
+}
+
+export interface ChefMenuResponse {
+  modo: 'menu';
+  fuera_de_tema: boolean;
+  mensaje: string | null;
+  aclaracion: string | null;
+  dias: MenuDay[];
+  advertencias: string[];
+}
+

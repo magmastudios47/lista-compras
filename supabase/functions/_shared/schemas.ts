@@ -109,7 +109,37 @@ export const InterpretItemsResponseSchema = z.object({
   items: z.array(InterpretItemSchema).default([]),
 });
 
+export const MealTypeEnum = z.enum(['desayuno', 'almuerzo', 'merienda', 'cena']);
+
+export const MenuItemMealSchema = z.object({
+  tipo: MealTypeEnum,
+  nombre: z.string(),
+  porciones: z.number().default(2),
+  tiempo_minutos: z.number().optional(),
+  por_que_encaja: z.string().optional(),
+  analisis_plato: z.array(z.string()).default([]),
+  ingredientes: z.array(ChefIngredientSchema).default([]),
+});
+
+export const MenuDaySchema = z.object({
+  dia: z.string(),
+  comidas: z.array(MenuItemMealSchema).default([]),
+});
+
+export const MenuResponseSchema = z.object({
+  modo: z.literal('menu'),
+  fuera_de_tema: z.boolean().default(false),
+  mensaje: z.string().nullable().default(null),
+  aclaracion: z.string().nullable().default(null),
+  dias: z.array(MenuDaySchema).default([]),
+  advertencias: z.array(z.string()).default([]),
+});
+
 export type CookResponse = z.infer<typeof CookResponseSchema>;
 export type SuggestResponse = z.infer<typeof SuggestResponseSchema>;
 export type InterpretPantryResponse = z.infer<typeof InterpretPantryResponseSchema>;
 export type InterpretItemsResponse = z.infer<typeof InterpretItemsResponseSchema>;
+export type MenuResponse = z.infer<typeof MenuResponseSchema>;
+export type MenuItemMeal = z.infer<typeof MenuItemMealSchema>;
+export type MenuDay = z.infer<typeof MenuDaySchema>;
+

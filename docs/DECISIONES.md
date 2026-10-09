@@ -110,7 +110,18 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - **Toast flotante con cuenta regresiva de 10s**: Aparece un toast visible con badge de segundos restantes (`10s`...`0s`), descripción de la cantidad de productos y un botón destacado "Deshacer".
   - **Restauración o eliminación física**:
     - Si el usuario presiona "Deshacer" dentro de los 10 segundos, `deleted_at` se restablece a `null` de inmediato y todos los elementos vuelven a su posición previa sin pérdida de datos.
-    - Si expiran los 10 segundos sin deshacer, se ejecuta la eliminación definitiva (`DELETE`) en la base de datos y en el almacenamiento local.
   - **Soporte Offline**: `offlineStorage` maneja `deleted_at` en memoria y persistencia local universal; si se confirma la eliminación sin conexión, se encolan mutaciones de tipo `delete` en la cola de sincronización.
+
+---
+
+### Decisión 12: Menú Semanal Mejorado (Modo "menu", Perfiles Nutricionales y Cuotas)
+- **Contexto**: Planificar una semana completa de comidas en una sola llamada a un LLM suele exceder tokens de salida o generar platos monótonos. Además, requiere adaptarse a perfiles (deportista, bajar de peso, niños) sin dar consejos médicos no autorizados y evitando comprar ingredientes repetidos.
+- **Decisión**:
+  - **Panel configurable por día**: Permite elegir qué comidas planificar (`desayuno`, `almuerzo`, `merienda`, `cena`) para cada día de la semana, con atajos rápidos ("Todas las comidas", "Solo almuerzo/cena", "Limpiar").
+  - **Perfiles y seguridad**: Selección rápida de perfiles (Deportista, Bajar de peso, Ganar masa muscular, Niños, etc.) y campo libre. Se implementó un aviso fijo obligatorio: *"Son sugerencias generales, no reemplazan a un nutricionista o profesional de la salud"*, con advertencias automáticas ante condiciones médicas declaradas (diabetes, celiaquía, etc.).
+  - **Fidelidad al Plato en cada comida**: Toda comida incluye `analisis_plato` para justificar cada ingrediente según el pedido exacto sin ingredientes inventados.
+  - **Gating de Plan y Costo de Cuota**: Exclusivo para hogares con plan Premium; consume 3 consultas del límite mensual centralizado por hogar.
+  - **Lista unificada en el servidor/cliente**: Los ingredientes de todas las comidas se unifican sumando cantidades con unidades compatibles (`mergeDuplicateIngredients`) y se descuentan de forma determinista contra la despensa (`calculatePantryDiscounts`), permitiendo desmarcar ingredientes antes de confirmar.
+
 
 

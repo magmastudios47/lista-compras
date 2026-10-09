@@ -4,12 +4,16 @@ import {
   ChefSuggestResponse,
   ChefInterpretPantryResponse,
   ChefInterpretItemsResponse,
+  ChefMenuResponse,
+  MealType,
+  MenuItemMeal,
+  MenuDay,
   DiscountComparisonResult,
   PantryItem,
 } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
-import { calculatePantryDiscounts } from '../lib/discountEngine';
+import { calculatePantryDiscounts, mergeDuplicateIngredients } from '../lib/discountEngine';
 import { processHandwrittenText } from '../lib/textPipeline';
 
 export function useChefAi() {
@@ -184,6 +188,72 @@ export function useChefAi() {
     [interpretItems]
   );
 
+  // Modo Menú Semanal (cuenta como 3 consultas)
+  const generateWeeklyMenu = useCallback(
+    async (params: {
+      daysConfig: Array<{ dia: string; comidas: MealType[] }>;
+      targetProfile: string;
+      profileDetail?: string;
+      persons?: number;
+      mandatoryDishes?: string;
+      pantry: PantryItem[];
+    }): Promise<{
+      response: ChefMenuResponse;
+      comparisons: DiscountComparisonResult[];
+    }> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        let menuData: ChefMenuResponse;
+        const p = params.persons || 4;
+
+        if (isConfigured && household) {
+          const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+            body: {
+              modo: 'menu',
+              dias_config: params.daysConfig,
+              objetivo_perfil: params.targetProfile,
+              objetivo_detalle: params.profileDetail,
+              personas: p,
+              platos_obligatorios: params.mandatoryDishes,
+              despensa: params.pantry.map((x) => x.name),
+              household_id: household.id,
+            },
+          });
+
+          if (fnError || !data) {
+            throw new Error(fnError?.message || data?.error || 'Error al generar el menú.');
+          }
+          menuData = data as ChefMenuResponse;
+          // Incrementa 3 consultas
+          incrementChefUsage();
+          incrementChefUsage();
+          incrementChefUsage();
+        } else {
+          // Fallback MOCK / Offline
+          await new Promise((r) => setTimeout(r, 600));
+          menuData = generateMockMenuResponse(params);
+          incrementChefUsage();
+        }
+
+        // Unificar ingredientes de todas las comidas del menú y descontar contra la despensa
+        const allIngredients = menuData.dias.flatMap((d) => d.comidas.flatMap((c) => c.ingredientes));
+        const merged = mergeDuplicateIngredients(allIngredients);
+        const comparisons = calculatePantryDiscounts(merged, params.pantry);
+
+        return { response: menuData, comparisons };
+      } catch (err: any) {
+        const msg = err.message || 'Error al generar el menú semanal.';
+        setError(msg);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [household, incrementChefUsage]
+  );
+
   return {
     loading,
     error,
@@ -191,6 +261,7 @@ export function useChefAi() {
     askToSuggest,
     interpretItems,
     interpretPantry,
+    generateWeeklyMenu,
     remainingQueries,
   };
 }
@@ -626,5 +697,242 @@ function generateMockInterpretPantry(text: string): ChefInterpretPantryResponse 
     fuera_de_tema: false,
     mensaje: null,
     items,
+  };
+}
+
+export function generateMockMenuResponse(params: {
+  daysConfig: Array<{ dia: string; comidas: MealType[] }>;
+  targetProfile: string;
+  profileDetail?: string;
+  persons?: number;
+  mandatoryDishes?: string;
+  pantry?: PantryItem[];
+}): ChefMenuResponse {
+  const p = params.persons || 4;
+  const profile = params.targetProfile.toLowerCase();
+  const detail = (params.profileDetail || '').toLowerCase();
+  const warnings: string[] = [
+    'Son sugerencias generales, no reemplazan a un nutricionista o profesional de la salud.',
+  ];
+
+  if (
+    detail.includes('diabet') ||
+    detail.includes('celiac') ||
+    detail.includes('embaraz') ||
+    detail.includes('renal') ||
+    profile.includes('tacc')
+  ) {
+    warnings.push(
+      'Si tenés alguna condición médica específica, te recomendamos validar tu plan alimentario con un médico o nutricionista matriculado.'
+    );
+  }
+
+  // Plantillas de comidas argentinas adaptadas
+  const getMealForType = (
+    tipo: MealType,
+    dayName: string,
+    dayIndex: number
+  ): MenuItemMeal => {
+    if (tipo === 'desayuno') {
+      if (profile.includes('deport') || profile.includes('muscul')) {
+        return {
+          tipo: 'desayuno',
+          nombre: 'Huevos revueltos con tostadas y palta',
+          porciones: p,
+          tiempo_minutos: 15,
+          por_que_encaja: 'Aporte alto de proteínas y grasas saludables para arrancar el día.',
+          analisis_plato: ['huevos revueltos: huevo, manteca', 'tostadas: pan, palta'],
+          ingredientes: [
+            { nombre: 'huevo', cantidad: p * 2, unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+            { nombre: 'pan de molde', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+            { nombre: 'palta', cantidad: Math.ceil(p / 2), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+          ],
+        };
+      } else if (profile.includes('peso')) {
+        return {
+          tipo: 'desayuno',
+          nombre: 'Yogur con avena y manzana rallada',
+          porciones: p,
+          tiempo_minutos: 10,
+          por_que_encaja: 'Fibra saciante con bajo índice glucémico.',
+          analisis_plato: ['tazon: yogur natural, avena, manzana'],
+          ingredientes: [
+            { nombre: 'yogur natural', cantidad: p, unidad: 'unidad', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+            { nombre: 'avena', cantidad: p * 30, unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+            { nombre: 'manzana', cantidad: p, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+          ],
+        };
+      }
+      return {
+        tipo: 'desayuno',
+        nombre: 'Tostadas con queso crema y café con leche',
+        porciones: p,
+        tiempo_minutos: 10,
+        por_que_encaja: 'Desayuno clásico rioplatense, simple y rendidor.',
+        analisis_plato: ['tostadas: pan, queso crema', 'cafe con leche: leche, cafe'],
+        ingredientes: [
+          { nombre: 'pan', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+          { nombre: 'queso crema', cantidad: 1, unidad: 'paquete', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+          { nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        ],
+      };
+    }
+
+    if (tipo === 'merienda') {
+      if (profile.includes('nino') || profile.includes('niño')) {
+        return {
+          tipo: 'merienda',
+          nombre: 'Licuado de banana con galletitas caseras',
+          porciones: p,
+          tiempo_minutos: 15,
+          por_que_encaja: 'Energía nutritiva y atractiva para los chicos.',
+          analisis_plato: ['licuado: banana, leche', 'galletitas: galletitas de avena'],
+          ingredientes: [
+            { nombre: 'banana', cantidad: p, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+            { nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+          ],
+        };
+      }
+      return {
+        tipo: 'merienda',
+        nombre: 'Mate o infusión con tostadas integrales y queso',
+        porciones: p,
+        tiempo_minutos: 10,
+        por_que_encaja: 'Merienda ligera que no interfiere con la cena.',
+        analisis_plato: ['infusion: yerba mate', 'tostadas: pan integral, queso'],
+        ingredientes: [
+          { nombre: 'yerba mate', cantidad: 1, unidad: 'paquete', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
+          { nombre: 'pan', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        ],
+      };
+    }
+
+    if (tipo === 'almuerzo') {
+      const lunchDishes = [
+        {
+          nombre: 'Pechuga de pollo a la plancha con arroz y ensalada',
+          analisis: ['pollo: pechuga de pollo, limon', 'guarnicion: arroz, tomate, lechuga'],
+          ings: [
+            { nombre: 'pechuga de pollo', cantidad: p * 0.25, unidad: 'kg', categoria: 'carniceria' as const },
+            { nombre: 'arroz', cantidad: p * 70, unidad: 'g', categoria: 'almacen' as const },
+            { nombre: 'tomate', cantidad: p, unidad: 'unidad', categoria: 'verduleria' as const },
+            { nombre: 'lechuga', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
+          ],
+        },
+        {
+          nombre: 'Tarta casera de zapallitos y queso',
+          analisis: ['tarta: masa de tarta, zapallito, cebolla, huevo, queso cremoso'],
+          ings: [
+            { nombre: 'masa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'almacen' as const },
+            { nombre: 'zapallito', cantidad: p >= 4 ? 6 : 4, unidad: 'unidad', categoria: 'verduleria' as const },
+            { nombre: 'cebolla', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
+            { nombre: 'huevo', cantidad: 3, unidad: 'unidad', categoria: 'almacen' as const },
+            { nombre: 'queso cremoso', cantidad: 250, unidad: 'g', categoria: 'lacteos' as const },
+          ],
+        },
+        {
+          nombre: 'Fideos con salsa de tomate y albóndigas magras',
+          analisis: ['fideos: fideos secos', 'tuco: salsa de tomate, carne picada, cebolla'],
+          ings: [
+            { nombre: 'fideos', cantidad: p * 100, unidad: 'g', categoria: 'almacen' as const },
+            { nombre: 'salsa de tomate', cantidad: 1, unidad: 'paquete', categoria: 'almacen' as const },
+            { nombre: 'carne picada', cantidad: p * 120, unidad: 'g', categoria: 'carniceria' as const },
+            { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
+          ],
+        },
+      ];
+
+      const choice = lunchDishes[dayIndex % lunchDishes.length];
+      return {
+        tipo: 'almuerzo',
+        nombre: choice.nombre,
+        porciones: p,
+        tiempo_minutos: 35,
+        por_que_encaja: 'Almuerzo balanceado con proteínas y energía equilibrada.',
+        analisis_plato: choice.analisis,
+        ingredientes: choice.ings.map((it) => ({
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          unidad: it.unidad as any,
+          categoria: it.categoria,
+          es_basico: false,
+          opcional: false,
+          item_despensa_coincidente: null,
+        })),
+      };
+    }
+
+    // Cena
+    const dinnerDishes = [
+      {
+        nombre: 'Milanesas al horno con puré de zapallo',
+        analisis: ['milanesa: nalga, pan rallado, huevo', 'pure de zapallo: zapallo anco, manteca, leche'],
+        ings: [
+          { nombre: 'nalga', cantidad: p * 0.25, unidad: 'kg', categoria: 'carniceria' as const },
+          { nombre: 'pan rallado', cantidad: 250, unidad: 'g', categoria: 'almacen' as const },
+          { nombre: 'huevo', cantidad: 2, unidad: 'unidad', categoria: 'almacen' as const },
+          { nombre: 'zapallo anco', cantidad: 1, unidad: 'kg', categoria: 'verduleria' as const },
+          { nombre: 'leche', cantidad: 150, unidad: 'ml', categoria: 'lacteos' as const },
+          { nombre: 'manteca', cantidad: 50, unidad: 'g', categoria: 'lacteos' as const },
+        ],
+      },
+      {
+        nombre: 'Tortilla de verduras con ensalada de tomate y zanahoria',
+        analisis: ['tortilla: acelga, zanahoria, cebolla, huevo', 'ensalada: tomate, zanahoria rallada'],
+        ings: [
+          { nombre: 'acelga', cantidad: 1, unidad: 'atado', categoria: 'verduleria' as const },
+          { nombre: 'zanahoria', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
+          { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
+          { nombre: 'huevo', cantidad: 4, unidad: 'unidad', categoria: 'almacen' as const },
+          { nombre: 'tomate', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
+        ],
+      },
+      {
+        nombre: 'Guiso liviano de lentejas y verduras',
+        analisis: ['guiso: lentejas, zanahoria, cebolla, morron, calabaza'],
+        ings: [
+          { nombre: 'lentejas', cantidad: 400, unidad: 'g', categoria: 'almacen' as const },
+          { nombre: 'calabaza', cantidad: 500, unidad: 'g', categoria: 'verduleria' as const },
+          { nombre: 'cebolla', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
+          { nombre: 'morron', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
+        ],
+      },
+    ];
+
+    const choice = dinnerDishes[dayIndex % dinnerDishes.length];
+    return {
+      tipo: 'cena',
+      nombre: choice.nombre,
+      porciones: p,
+      tiempo_minutos: 40,
+      por_que_encaja: 'Cena digestiva, reconfortante y rendidora para la familia.',
+      analisis_plato: choice.analisis,
+      ingredientes: choice.ings.map((it) => ({
+        nombre: it.nombre,
+        cantidad: it.cantidad,
+        unidad: it.unidad as any,
+        categoria: it.categoria,
+        es_basico: false,
+        opcional: false,
+        item_despensa_coincidente: null,
+      })),
+    };
+  };
+
+  const days: MenuDay[] = params.daysConfig.map((dayCfg, idx) => {
+    const comidas = dayCfg.comidas.map((tipo) => getMealForType(tipo, dayCfg.dia, idx));
+    return {
+      dia: dayCfg.dia,
+      comidas,
+    };
+  });
+
+  return {
+    modo: 'menu',
+    fuera_de_tema: false,
+    mensaje: null,
+    aclaracion: null,
+    dias: days,
+    advertencias: warnings,
   };
 }

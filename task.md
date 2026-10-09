@@ -73,12 +73,12 @@
   - [x] Botones para vaciar lista, vaciar despensa y vaciar comprados con protección
   - [x] Borrado lógico inmediato y botón "Deshacer" por 10 segundos
   - [x] Sincronización en tiempo real y offline
-- [ ] **Bloque 6: Menú Semanal Mejorado**
-  - [ ] Panel de comidas por día (desayuno, almuerzo, merienda, cena) y atajo global
-  - [ ] Objetivos / perfiles de usuario, disclaimer de salud fijo
-  - [ ] Generación en paralelo por día respetando cuota de IA (cuenta como 3 consultas)
-  - [ ] Modo de prompt `menu` y lista unificada
-  - [ ] Control de acceso por plan
+- [x] **Bloque 6: Menú Semanal Mejorado**
+  - [x] Panel de comidas por día (desayuno, almuerzo, merienda, cena) y atajo global
+  - [x] Objetivos / perfiles de usuario, disclaimer de salud fijo
+  - [x] Generación en paralelo por día respetando cuota de IA (cuenta como 3 consultas)
+  - [x] Modo de prompt `menu` y lista unificada
+  - [x] Control de acceso por plan
 - [ ] **Bloque 7: Precios y Estudio SEPA / Precios Claros**
   - [ ] Precio opcional por ítem, total estimado aproximado y memoria por hogar
   - [ ] Costo aproximado por receta

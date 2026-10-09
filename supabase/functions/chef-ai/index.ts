@@ -7,6 +7,7 @@ import {
   SuggestResponseSchema,
   InterpretPantryResponseSchema,
   InterpretItemsResponseSchema,
+  MenuResponseSchema,
 } from '../_shared/schemas.ts';
 
 const corsHeaders = {
@@ -63,9 +64,9 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id } = body;
+    const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id, dias_config, objetivo_perfil, objetivo_detalle, platos_obligatorios, platos_ya_elegidos } = body;
 
-    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa'];
+    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu'];
     if (!modo || !allowedModes.includes(modo)) {
       return new Response(
         JSON.stringify({ error: 'Modo inválido.' }),
@@ -73,11 +74,33 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Control de Cuota Mensual
+    // 2. Control de Acceso por Plan y Cuota Mensual
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
+    const isMenuMode = modo === 'menu';
+    const queryCost = isMenuMode ? 3 : 1;
 
     if (household_id) {
+      // Si es modo menu, verificar plan Premium
+      if (isMenuMode) {
+        const { data: license } = await supabaseClient
+          .from('licenses')
+          .select('plan_id, status')
+          .eq('household_id', household_id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (!license || license.plan_id !== 'premium') {
+          return new Response(
+            JSON.stringify({
+              error: 'La planificación del Menú Semanal requiere el plan Premium.',
+              requires_premium: true,
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       if (isInterpretationMode) {
         // Cuota propia para interpretación de items (200 consultas por mes por hogar)
         const startOfMonth = new Date();
@@ -101,7 +124,7 @@ serve(async (req: Request) => {
           );
         }
       } else {
-        // Cuota general del Chef mensual
+        // Cuota general del Chef mensual (1 consulta normal, 3 para menú)
         const { data: hh } = await supabaseClient
           .from('households')
           .select('monthly_chef_limit, chef_queries_used_month')
@@ -110,10 +133,10 @@ serve(async (req: Request) => {
 
         if (hh) {
           householdData = hh;
-          if (hh.chef_queries_used_month >= hh.monthly_chef_limit) {
+          if (hh.chef_queries_used_month + queryCost > hh.monthly_chef_limit) {
             return new Response(
               JSON.stringify({
-                error: 'Has alcanzado el límite mensual de consultas del Chef IA para tu hogar.',
+                error: `Has alcanzado el límite mensual de consultas del Chef IA (${queryCost} necesarias).`,
                 quota_exceeded: true,
               }),
               { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -124,7 +147,7 @@ serve(async (req: Request) => {
     }
 
     // 3. Caché de consultas idénticas (para ahorrar tokens y dar respuesta instantánea)
-    const normalizedKey = `${modo}_${(pedido || texto_despensa || '').trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}`;
+    const normalizedKey = `${modo}_${(pedido || texto_despensa || JSON.stringify(dias_config || '')).trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}_${objetivo_perfil || ''}`;
     const cacheKey = await crypto.subtle
       .digest('SHA-256', new TextEncoder().encode(normalizedKey))
       .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join(''));
@@ -137,7 +160,6 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (cached) {
-      // Registrar uso como cache hit
       if (household_id) {
         await supabaseClient.from('ai_usage_log').insert({
           household_id,
@@ -159,6 +181,7 @@ serve(async (req: Request) => {
     if (modo === 'sugerir') validator = SuggestResponseSchema.parse;
     if (modo === 'interpretar_items') validator = InterpretItemsResponseSchema.parse;
     if (modo === 'interpretar_despensa') validator = InterpretPantryResponseSchema.parse;
+    if (modo === 'menu') validator = MenuResponseSchema.parse;
 
     const geminiResult = await gemini.generateChefResponse(
       {
@@ -169,6 +192,11 @@ serve(async (req: Request) => {
           restricciones: Array.isArray(restricciones) ? restricciones : [],
           despensa: Array.isArray(despensa) ? despensa : [],
           texto_despensa,
+          dias_config,
+          objetivo_perfil,
+          objetivo_detalle,
+          platos_obligatorios,
+          platos_ya_elegidos,
         },
       },
       validator
@@ -197,7 +225,7 @@ serve(async (req: Request) => {
         await supabaseClient
           .from('households')
           .update({
-            chef_queries_used_month: householdData.chef_queries_used_month + 1,
+            chef_queries_used_month: householdData.chef_queries_used_month + queryCost,
           })
           .eq('id', household_id);
       }

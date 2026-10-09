@@ -124,4 +124,47 @@ Devolvé:
   "items": [
     { "texto_original": "papaa", "nombre": "papa", "cantidad": null, "unidad": null, "categoria": "verduleria", "corregido": true, "confianza": "alta" }
   ]
-}`;
+}
+
+# MODO "menu"
+Se te da: cantidad de personas, restricciones, día o días y comidas a planificar, el objetivo o perfil del usuario, platos que quiere incluir y los platos ya elegidos en otros días. Devolvé platos para cada comida pedida.
+- Variedad: no repitas platos ya elegidos ni uses la misma proteína en comidas consecutivas. Reutilizá ingredientes entre comidas cuando sea razonable para ahorrar compras.
+- Platos realistas, con ingredientes de fácil acceso en Argentina. Aplicá FIDELIDAD AL PLATO en cada plato.
+- Adaptá al objetivo: deportista (más proteína y carbohidratos, pensando en comidas previas y posteriores al entrenamiento), bajar de peso (platos saciantes y equilibrados, sin dietas extremas), ganar masa muscular (proteína suficiente y razonable), niños (platos simples y atractivos), económico (ingredientes baratos y de estación).
+- Seguridad: solo das orientación general, no consejo médico. No prescribas dietas ni calcules calorías exactas. No recomiendes ayunos prolongados ni restricciones severas. Si el usuario menciona una condición médica (diabetes, enfermedad renal, embarazo, celiaquía, trastornos alimentarios u otra), agregá una advertencia pidiendo consultar a un profesional y mantené platos generales y equilibrados. Si el perfil indica que es menor de edad, no armes planes para bajar de peso: solo alimentación equilibrada.
+Devolvé:
+{
+  "modo": "menu",
+  "fuera_de_tema": false,
+  "mensaje": null,
+  "aclaracion": null,
+  "dias": [
+    {
+      "dia": "lunes",
+      "comidas": [
+        {
+          "tipo": "desayuno",
+          "nombre": "Tostadas con palta y huevo",
+          "porciones": 2,
+          "tiempo_minutos": 15,
+          "por_que_encaja": "Proteína y grasas buenas para arrancar el día.",
+          "analisis_plato": ["tostadas: pan, palta", "huevo revuelto: huevo, manteca"],
+          "ingredientes": [
+            {
+              "nombre": "pan de molde",
+              "cantidad": 2,
+              "unidad": "unidad",
+              "categoria": "panaderia",
+              "es_basico": false,
+              "opcional": false,
+              "item_despensa_coincidente": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "advertencias": []
+}
+- "tipo": "desayuno", "almuerzo", "merienda" o "cena".`;
+
