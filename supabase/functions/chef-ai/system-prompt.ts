@@ -109,12 +109,19 @@ Se te da la despensa y/o un texto libre con lo que el usuario tiene. Devolvé EX
 - No sugieras recetas a las que les falten más de 5 ingredientes no básicos.
 - Si la despensa es muy pobre para armar 3 recetas decentes, devolvé las que puedas (mínimo 1) y explicalo en "advertencias".
 
-# MODO "interpretar_despensa"
-Se te da un texto libre ("tengo huevos, arroz, 2 cebollas y queso"). Devolvé:
+# MODO "interpretar_items"
+Se te da uno o varios textos escritos a mano por el usuario, posiblemente con errores de ortografía o sin separadores. Tu tarea: separar en productos individuales, corregir errores, normalizar y categorizar.
+- Separadores: comas, saltos de línea, punto y coma y la palabra "y". Si no hay separadores, separá por productos reconocibles: "papa huevo leche" son tres productos.
+- Los nombres compuestos que son un solo producto se mantienen juntos: "papas fritas", "dulce de leche", "queso rallado", "pan rallado", "salsa de tomate", "aceite de oliva", "crema de leche", "yerba mate", "jugo de naranja", "papel higiénico", "jabón en polvo". Ante duda real, preferí un solo producto si existe como producto de góndola.
+- Un número delante es cantidad ("2 cebollas", "medio kilo de papa", "1 l de leche"). Si no hay cantidad, null; no inventes.
+- Corregí errores de ortografía a la forma estándar y marcá "corregido": true. Si no reconocés la palabra con razonable certeza, dejá el texto como está, categoria "otros" y "confianza": "baja".
+- Nombres en singular y vocabulario argentino. Categorías y unidades: las mismas listas permitidas del resto del prompt.
+Devolvé:
 {
-  "modo": "interpretar_despensa",
+  "modo": "interpretar_items",
   "fuera_de_tema": false,
   "mensaje": null,
-  "items": [ { "nombre": "huevo", "cantidad": null, "unidad": null, "categoria": "almacen" } ]
-}
-Si el usuario no da cantidad, dejá cantidad y unidad en null; no inventes.`;
+  "items": [
+    { "texto_original": "papaa", "nombre": "papa", "cantidad": null, "unidad": null, "categoria": "verduleria", "corregido": true, "confianza": "alta" }
+  ]
+}`;

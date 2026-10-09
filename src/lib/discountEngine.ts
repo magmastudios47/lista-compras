@@ -1,5 +1,6 @@
 import { ChefIngredient, DiscountComparisonResult, PantryItem, Unit } from '../types';
 import { normalizeString, singularizeIngredient } from './normalizer';
+import { levenshtein } from './textPipeline';
 
 /**
  * Convierte una cantidad de una unidad a otra si son compatibles.
@@ -81,6 +82,16 @@ export function calculatePantryDiscounts(
       matchingPantry = pantryItems.find((p) => {
         const pNorm = singularizeIngredient(p.name);
         return ingNormalized.includes(pNorm) || pNorm.includes(ingNormalized);
+      });
+    }
+
+    if (!matchingPantry) {
+      // 3. Coincidencia aproximada con normalizador y Levenshtein (ej. "cebolla" vs "cebollaa", "tomate" vs "tomte")
+      matchingPantry = pantryItems.find((p) => {
+        const pNorm = singularizeIngredient(p.name);
+        const dist = levenshtein(ingNormalized, pNorm);
+        const maxLen = Math.max(ingNormalized.length, pNorm.length);
+        return dist <= 2 && (1 - dist / maxLen) >= 0.7;
       });
     }
 

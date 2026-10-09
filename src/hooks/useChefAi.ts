@@ -3,12 +3,14 @@ import {
   ChefCookResponse,
   ChefSuggestResponse,
   ChefInterpretPantryResponse,
+  ChefInterpretItemsResponse,
   DiscountComparisonResult,
   PantryItem,
 } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
 import { calculatePantryDiscounts } from '../lib/discountEngine';
+import { processHandwrittenText } from '../lib/textPipeline';
 
 export function useChefAi() {
   const { household, remainingQueries, incrementChefUsage } = useHousehold();
@@ -117,31 +119,38 @@ export function useChefAi() {
     [household, incrementChefUsage]
   );
 
-  // Modo Interpretar Despensa
-  const interpretPantry = useCallback(
-    async (text: string): Promise<ChefInterpretPantryResponse> => {
+  // Modo Interpretar Ítems (Reemplaza a interpretar_despensa)
+  const interpretItems = useCallback(
+    async (text: string): Promise<ChefInterpretItemsResponse> => {
       setLoading(true);
       setError(null);
 
       try {
-        let parsedData: ChefInterpretPantryResponse;
+        let parsedData: ChefInterpretItemsResponse;
 
         if (isConfigured && household) {
           const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
             body: {
-              modo: 'interpretar_despensa',
+              modo: 'interpretar_items',
               texto_despensa: text,
               household_id: household?.id,
             },
           });
 
           if (fnError || !data) {
-            throw new Error(fnError?.message || data?.error || 'Error al interpretar texto de despensa.');
+            throw new Error(fnError?.message || data?.error || 'Error al interpretar ítems.');
           }
-          parsedData = data as ChefInterpretPantryResponse;
+          parsedData = data as ChefInterpretItemsResponse;
         } else {
-          await new Promise((r) => setTimeout(r, 600));
-          parsedData = generateMockInterpretPantry(text);
+          // Procesamiento offline con pipeline determinista y catálogo argentino
+          await new Promise((r) => setTimeout(r, 400));
+          const localItems = processHandwrittenText(text, household?.id);
+          parsedData = {
+            modo: 'interpretar_items',
+            fuera_de_tema: false,
+            mensaje: null,
+            items: localItems,
+          };
         }
 
         return parsedData;
@@ -156,11 +165,31 @@ export function useChefAi() {
     [household]
   );
 
+  // Alias para retrocompatibilidad
+  const interpretPantry = useCallback(
+    async (text: string): Promise<ChefInterpretPantryResponse> => {
+      const res = await interpretItems(text);
+      return {
+        modo: 'interpretar_despensa',
+        fuera_de_tema: res.fuera_de_tema,
+        mensaje: res.mensaje,
+        items: res.items.map((i) => ({
+          nombre: i.nombre,
+          cantidad: i.cantidad,
+          unidad: i.unidad,
+          categoria: i.categoria,
+        })),
+      };
+    },
+    [interpretItems]
+  );
+
   return {
     loading,
     error,
     askToCook,
     askToSuggest,
+    interpretItems,
     interpretPantry,
     remainingQueries,
   };

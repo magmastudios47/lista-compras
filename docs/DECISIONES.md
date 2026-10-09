@@ -88,3 +88,15 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - El servidor y cliente validan con Zod la presencia de `analisis_plato`.
   - El generador mock local reproduce fielmente esta descomposición para desarrollo offline y testing determinista.
 
+---
+
+### Decisión 10: Catálogo Local Offline (711 ítems), Pipeline Unificado y Modo interpretar_items
+- **Contexto**: Errores ortográficos ("papaa", "tomte"), frases sin separadores ("papa huevo leche", "papas fritas") y falta de categorización automática dificultaban el uso rápido con una mano.
+- **Decisión**:
+  - Se construyó un catálogo local versionado (`src/lib/catalog.ts`, v1.1.0) con 711 productos de góndola argentina indexados por mapa exacto, sinónimos y categorías.
+  - Se implementó un algoritmo *Greedy Longest-Match-First* que preserva ítems compuestos ("papas fritas", "dulce de leche", "pan rallado") y segmenta listas continuas sin comas ("papa huevo leche" -> 3 productos).
+  - Normalización y comparación tolerante con distancia Levenshtein (umbral según longitud) que autocorrige errores tipográficos comunes en el cliente sin requerir conexión a internet.
+  - Memoria de categorías por hogar (`saveHouseholdCategoryOverride`) que aprende y respeta cuando un usuario reclasifica un producto.
+  - Se introdujo el modo `interpretar_items` (reemplazando a `interpretar_despensa`) con cuota mensual dedicada e independiente de 200 consultas/mes por hogar, rate limit propio y caché global.
+  - El cruce entre el Chef y la despensa (`discountEngine.ts`) utiliza comparación aproximada para tolerar plurales o diferencias menores de tipeo.
+

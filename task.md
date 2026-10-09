@@ -62,13 +62,13 @@
   - [x] Pruebas de regresión "debe incluir" / "no debe incluir" (milanesa puré de zapallo sin papa, etc.)
   - [x] Pruebas end-to-end de modos cocinar y sugerir
   - [x] Actualización de `docs/chef-quality-report.md`
-- [ ] **Bloque 4: Texto Escrito a Mano (Catálogo >=600 ítems, Ortografía, Categorías)**
-  - [ ] Catálogo local offline con >= 600 productos de Argentina con sinónimos y categorías
-  - [ ] Pipeline único de procesamiento de texto (separadores, normalización, Levenshtein, calce más largo)
-  - [ ] Nuevo modo de IA `interpretar_items` con caché global y cuota propia (200/mes)
-  - [ ] Asignación automática de categorías y memoria de cambios por hogar
-  - [ ] Cruce aproximado entre chef y despensa
-  - [ ] Suite de pruebas de ortografía y segmentación
+- [x] **Bloque 4: Texto Escrito a Mano (Catálogo >=600 ítems, Ortografía, Categorías)**
+  - [x] Catálogo local offline con >= 600 productos de Argentina con sinónimos y categorías
+  - [x] Pipeline único de procesamiento de texto (separadores, normalización, Levenshtein, calce más largo)
+  - [x] Nuevo modo de IA `interpretar_items` con caché global y cuota propia (200/mes)
+  - [x] Asignación automática de categorías y memoria de cambios por hogar
+  - [x] Cruce aproximado entre chef y despensa
+  - [x] Suite de pruebas de ortografía y segmentación
 - [ ] **Bloque 5: Botones de Vaciar con Deshacer**
   - [ ] Botones para vaciar lista, vaciar despensa y vaciar comprados con protección
   - [ ] Borrado lógico inmediato y botón "Deshacer" por 10 segundos

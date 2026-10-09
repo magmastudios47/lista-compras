@@ -4,7 +4,7 @@ import { CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt';
 export interface GeminiCallOptions {
   systemPrompt?: string;
   userData: {
-    modo: 'cocinar' | 'sugerir' | 'interpretar_despensa';
+    modo: 'cocinar' | 'sugerir' | 'interpretar_items' | 'interpretar_despensa';
     pedido?: string;
     personas?: number;
     restricciones?: string[];

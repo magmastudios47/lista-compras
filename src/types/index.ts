@@ -151,6 +151,23 @@ export interface ChefInterpretPantryResponse {
   items: ChefParsedPantryItem[];
 }
 
+export interface ChefParsedItem {
+  texto_original: string;
+  nombre: string;
+  cantidad: number | null;
+  unidad: Unit | null;
+  categoria: Category;
+  corregido: boolean;
+  confianza: 'alta' | 'media' | 'baja';
+}
+
+export interface ChefInterpretItemsResponse {
+  modo: 'interpretar_items';
+  fuera_de_tema: boolean;
+  mensaje: string | null;
+  items: ChefParsedItem[];
+}
+
 export interface DiscountComparisonResult {
   ingrediente: ChefIngredient;
   despensa_item: PantryItem | null;

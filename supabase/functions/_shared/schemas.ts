@@ -92,6 +92,24 @@ export const InterpretPantryResponseSchema = z.object({
   items: z.array(InterpretPantryItemSchema).default([]),
 });
 
+export const InterpretItemSchema = z.object({
+  texto_original: z.string(),
+  nombre: z.string().min(1),
+  cantidad: z.number().nullable().default(null),
+  unidad: UnitEnum.nullable().default(null),
+  categoria: CategoryEnum.default('otros'),
+  corregido: z.boolean().default(false),
+  confianza: z.enum(['alta', 'media', 'baja']).default('alta'),
+});
+
+export const InterpretItemsResponseSchema = z.object({
+  modo: z.literal('interpretar_items'),
+  fuera_de_tema: z.boolean(),
+  mensaje: z.string().nullable(),
+  items: z.array(InterpretItemSchema).default([]),
+});
+
 export type CookResponse = z.infer<typeof CookResponseSchema>;
 export type SuggestResponse = z.infer<typeof SuggestResponseSchema>;
 export type InterpretPantryResponse = z.infer<typeof InterpretPantryResponseSchema>;
+export type InterpretItemsResponse = z.infer<typeof InterpretItemsResponseSchema>;

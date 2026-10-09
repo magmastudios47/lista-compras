@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Category, PantryItem, Unit } from '../../types';
 import { CATEGORIES, UNITS } from '../../lib/constants';
 import { Archive, Plus, Trash2, Sparkles, Mic, Check, X, Search } from 'lucide-react';
+import { processHandwrittenText, saveHouseholdCategoryOverride } from '../../lib/textPipeline';
+import { useHousehold } from '../../context/HouseholdContext';
 
 interface PantryViewProps {
   pantryItems: PantryItem[];
@@ -22,6 +24,7 @@ export const PantryView: React.FC<PantryViewProps> = ({
   onInterpretText,
   isAiProcessing,
 }) => {
+  const { household } = useHousehold();
   const [searchTerm, setSearchTerm] = useState('');
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
   const [isDictateOpen, setIsDictateOpen] = useState(false);
@@ -33,6 +36,17 @@ export const PantryView: React.FC<PantryViewProps> = ({
   const [newQty, setNewQty] = useState<string>('');
   const [newUnit, setNewUnit] = useState<Unit>('unidad');
   const [newCategory, setNewCategory] = useState<Category>('almacen');
+  const [manualUserChangedCategory, setManualUserChangedCategory] = useState(false);
+
+  // Autocategorización en formulario manual
+  useEffect(() => {
+    if (!newName.trim() || manualUserChangedCategory) return;
+    const processed = processHandwrittenText(newName, household?.id);
+    if (processed.length > 0 && processed[0].confianza !== 'baja') {
+      setNewCategory(processed[0].categoria);
+      if (processed[0].unidad) setNewUnit(processed[0].unidad);
+    }
+  }, [newName, manualUserChangedCategory, household?.id]);
 
   const filteredItems = pantryItems.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -42,17 +56,52 @@ export const PantryView: React.FC<PantryViewProps> = ({
     e.preventDefault();
     if (!newName.trim()) return;
     const qtyNum = newQty ? parseFloat(newQty) : null;
-    await onAddItem(newName.trim(), qtyNum, qtyNum !== null ? newUnit : null, newCategory);
+    const finalName = newName.trim();
+    if (manualUserChangedCategory) {
+      saveHouseholdCategoryOverride(finalName, newCategory, household?.id);
+    }
+    await onAddItem(finalName, qtyNum, qtyNum !== null ? newUnit : null, newCategory);
     setNewName('');
     setNewQty('');
+    setManualUserChangedCategory(false);
     setIsManualAddOpen(false);
   };
 
   const handleInterpretFreeText = async () => {
     if (!dictateText.trim()) return;
+    // 1. Probar primero con el pipeline determinista local (offline, instantáneo)
+    const localProcessed = processHandwrittenText(dictateText.trim(), household?.id);
+    const hasUnrecognized = localProcessed.some((p) => p.confianza === 'baja');
+
+    if (!hasUnrecognized && localProcessed.length > 0) {
+      // Todo reconocido con catálogo local y ortografía corregida
+      setParsedPreview(
+        localProcessed.map((it) => ({
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          unidad: it.unidad,
+          categoria: it.categoria,
+          selected: true,
+        }))
+      );
+      return;
+    }
+
+    // 2. Si hay términos no reconocidos, consultar al modo de IA
     const result = await onInterpretText(dictateText.trim());
     if (result?.items && result.items.length > 0) {
       setParsedPreview(result.items.map((it) => ({ ...it, selected: true })));
+    } else if (localProcessed.length > 0) {
+      // Fallback a lo que pudo resolver el pipeline local
+      setParsedPreview(
+        localProcessed.map((it) => ({
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          unidad: it.unidad,
+          categoria: it.categoria,
+          selected: true,
+        }))
+      );
     }
   };
 

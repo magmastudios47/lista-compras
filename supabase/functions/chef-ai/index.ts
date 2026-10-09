@@ -6,6 +6,7 @@ import {
   CookResponseSchema,
   SuggestResponseSchema,
   InterpretPantryResponseSchema,
+  InterpretItemsResponseSchema,
 } from '../_shared/schemas.ts';
 
 const corsHeaders = {
@@ -64,38 +65,66 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id } = body;
 
-    if (!modo || !['cocinar', 'sugerir', 'interpretar_despensa'].includes(modo)) {
+    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa'];
+    if (!modo || !allowedModes.includes(modo)) {
       return new Response(
         JSON.stringify({ error: 'Modo inválido.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 2. Control de Cuota Mensual del Hogar
+    // 2. Control de Cuota Mensual
     let householdData: any = null;
-    if (household_id) {
-      const { data: hh } = await supabaseClient
-        .from('households')
-        .select('monthly_chef_limit, chef_queries_used_month')
-        .eq('id', household_id)
-        .maybeSingle();
+    const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
 
-      if (hh) {
-        householdData = hh;
-        if (hh.chef_queries_used_month >= hh.monthly_chef_limit) {
+    if (household_id) {
+      if (isInterpretationMode) {
+        // Cuota propia para interpretación de items (200 consultas por mes por hogar)
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const { count, error: countErr } = await supabaseClient
+          .from('ai_usage_log')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', household_id)
+          .in('mode', ['interpretar_items', 'interpretar_despensa'])
+          .gte('created_at', startOfMonth.toISOString());
+
+        if (!countErr && (count || 0) >= 200) {
           return new Response(
             JSON.stringify({
-              error: 'Has alcanzado el límite mensual de consultas del Chef IA para tu hogar.',
+              error: 'Has alcanzado el límite mensual de interpretación de ítems (200 por mes).',
               quota_exceeded: true,
             }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+      } else {
+        // Cuota general del Chef mensual
+        const { data: hh } = await supabaseClient
+          .from('households')
+          .select('monthly_chef_limit, chef_queries_used_month')
+          .eq('id', household_id)
+          .maybeSingle();
+
+        if (hh) {
+          householdData = hh;
+          if (hh.chef_queries_used_month >= hh.monthly_chef_limit) {
+            return new Response(
+              JSON.stringify({
+                error: 'Has alcanzado el límite mensual de consultas del Chef IA para tu hogar.',
+                quota_exceeded: true,
+              }),
+              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
       }
     }
 
     // 3. Caché de consultas idénticas (para ahorrar tokens y dar respuesta instantánea)
-    const normalizedKey = `${modo}_${(pedido || '').trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}`;
+    const normalizedKey = `${modo}_${(pedido || texto_despensa || '').trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}`;
     const cacheKey = await crypto.subtle
       .digest('SHA-256', new TextEncoder().encode(normalizedKey))
       .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join(''));
@@ -128,6 +157,7 @@ serve(async (req: Request) => {
     const gemini = new GeminiClient();
     let validator: any = CookResponseSchema.parse;
     if (modo === 'sugerir') validator = SuggestResponseSchema.parse;
+    if (modo === 'interpretar_items') validator = InterpretItemsResponseSchema.parse;
     if (modo === 'interpretar_despensa') validator = InterpretPantryResponseSchema.parse;
 
     const geminiResult = await gemini.generateChefResponse(
@@ -150,8 +180,8 @@ serve(async (req: Request) => {
       response_json: geminiResult.data,
     });
 
-    // 6. Registrar en ai_usage_log e incrementar cuota mensual del hogar
-    if (household_id && householdData) {
+    // 6. Registrar en ai_usage_log e incrementar cuota mensual si no es modo interpretación
+    if (household_id) {
       await supabaseClient.from('ai_usage_log').insert({
         household_id,
         user_id: userId === 'anonymous' ? null : userId,
@@ -163,12 +193,14 @@ serve(async (req: Request) => {
         status: 'success',
       });
 
-      await supabaseClient
-        .from('households')
-        .update({
-          chef_queries_used_month: householdData.chef_queries_used_month + 1,
-        })
-        .eq('id', household_id);
+      if (!isInterpretationMode && householdData) {
+        await supabaseClient
+          .from('households')
+          .update({
+            chef_queries_used_month: householdData.chef_queries_used_month + 1,
+          })
+          .eq('id', household_id);
+      }
     }
 
     return new Response(JSON.stringify(geminiResult.data), {

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Category, Unit } from '../../types';
 import { CATEGORIES, UNITS } from '../../lib/constants';
-import { Plus, Minus, X, Tag } from 'lucide-react';
+import { Plus, Minus, X, Tag, Sparkles } from 'lucide-react';
+import { processHandwrittenText, saveHouseholdCategoryOverride } from '../../lib/textPipeline';
+import { useHousehold } from '../../context/HouseholdContext';
 
 interface AddItemDrawerProps {
   isOpen: boolean;
@@ -14,14 +16,45 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
   onClose,
   onAdd,
 }) => {
+  const { household } = useHousehold();
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState<Unit>('unidad');
   const [category, setCategory] = useState<Category>('almacen');
+  const [userOverrodeCategory, setUserOverrodeCategory] = useState(false);
   const [estimatedPrice, setEstimatedPrice] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [autoSuggestedCat, setAutoSuggestedCat] = useState<string | null>(null);
+
+  // Autocategorización en vivo al escribir
+  useEffect(() => {
+    if (!name.trim()) {
+      setAutoSuggestedCat(null);
+      return;
+    }
+
+    if (!userOverrodeCategory) {
+      const processed = processHandwrittenText(name, household?.id);
+      if (processed.length > 0 && processed[0].confianza !== 'baja') {
+        const first = processed[0];
+        setCategory(first.categoria);
+        if (first.unidad && first.unidad !== 'unidad') {
+          setUnit(first.unidad);
+        }
+        if (first.cantidad && first.cantidad > 0) {
+          setQuantity(first.cantidad);
+        }
+        setAutoSuggestedCat(first.categoria);
+      }
+    }
+  }, [name, userOverrodeCategory, household?.id]);
 
   if (!isOpen) return null;
+
+  const handleCategorySelect = (newCat: Category) => {
+    setCategory(newCat);
+    setUserOverrodeCategory(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +63,37 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
     setIsSubmitting(true);
     try {
       const priceNum = estimatedPrice ? parseFloat(estimatedPrice) : undefined;
-      await onAdd(name.trim(), quantity, unit, category, priceNum);
+      const processed = processHandwrittenText(name.trim(), household?.id);
+
+      // Si el texto contenía múltiples ítems ("papa, huevo y leche")
+      if (processed.length > 1) {
+        for (const item of processed) {
+          await onAdd(
+            item.nombre,
+            item.cantidad || 1,
+            item.unidad || 'unidad',
+            item.categoria,
+            priceNum
+          );
+        }
+      } else {
+        // Un solo ítem
+        const singleName = processed.length === 1 ? processed[0].nombre : name.trim();
+        const finalCategory = category;
+
+        // Recordar preferencia del usuario para este producto en su hogar
+        if (userOverrodeCategory) {
+          saveHouseholdCategoryOverride(singleName, finalCategory, household?.id);
+        }
+
+        await onAdd(singleName, quantity, unit, finalCategory, priceNum);
+      }
+
       setName('');
       setQuantity(1);
       setEstimatedPrice('');
+      setUserOverrodeCategory(false);
+      setAutoSuggestedCat(null);
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -143,15 +203,22 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
 
           {/* Categoría */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
-              Categoría del súper
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Categoría del súper
+              </label>
+              {autoSuggestedCat && !userOverrodeCategory && (
+                <span className="text-[10px] text-patagonia-600 dark:text-patagonia-400 font-medium flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Autoasignada
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1">
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setCategory(cat.id)}
+                  onClick={() => handleCategorySelect(cat.id)}
                   className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ${
                     category === cat.id
                       ? 'bg-patagonia-600 text-white shadow-sm ring-2 ring-patagonia-400'
