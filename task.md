@@ -1,0 +1,95 @@
+# Plan de Trabajo - Lista Compars (PWA con Chef IA)
+
+- [x] **Fase 0: Arquitectura, Esquema de Base de Datos y Estructura**
+  - [x] Documento de decisiones de diseño (`docs/DECISIONES.md`)
+  - [x] Documento de arquitectura detallado (`docs/ARQUITECTURA.md`)
+  - [x] Esquema SQL completo con migraciones y RLS (`supabase/migrations/20261007_init.sql`)
+  - [x] Definición de skill de proyecto (`.agents/skills/chef-ia/SKILL.md`)
+- [x] **Fase 1: Proyecto Base, Autenticación, Hogares, Lista en Tiempo Real y PWA**
+  - [x] Inicialización Vite + React + TypeScript + Tailwind CSS
+  - [x] Configuración PWA (manifest, service worker, iconos, prompt de instalación iOS/Android)
+  - [x] Cliente Supabase con soporte offline/simulación local y autenticación (Google / Magic Link / Simulado)
+  - [x] Gestión de hogares (crear, unirse por código/link de WhatsApp, switch de hogar)
+  - [x] Lista de compras compartida en tiempo real (categorías, agregar, marcar comprado, restaurar, quién agregó)
+  - [x] Onboarding de 3 pasos y guía de instalación PWA
+- [x] **Fase 2: Despensa y Chef IA (Modos Cocinar, Sugerir, Interpretar Despensa)**
+  - [x] Módulo de despensa manual y dictado libre
+  - [x] Edge Function `chef-ai` con abstracción Gemini, control de rate limit, cuotas y caché
+  - [x] System prompt del Chef IA rioplatense y validación Zod
+  - [x] Descuento determinista en código (conversión de unidades g/kg, ml/l, unificación de nombres)
+  - [x] Modos Cocinar, Sugerir e Interpretar Despensa con preview interactivo
+  - [x] Script de pruebas de calidad del Chef (20 casos reales + prompt injection + reportes)
+  - [x] Reporte de calidad generado en `docs/chef-quality-report.md`
+- [x] **Fase 3: Modo Offline, Notificaciones Push y Pulido UI**
+  - [x] Service Worker para caching de assets y soporte offline
+  - [x] Local storage / IndexedDB con cola de sincronización (cola de mutaciones) y LWW (Last-Write-Wins)
+  - [x] Notificaciones Push (Web Push API + VAPID + Edge Function) con guía especial iOS
+  - [x] Tema Claro/Oscuro, diseño ergonómico mobile-first para una mano en el súper
+- [x] **Fase 4: Menú Semanal, Licencias y Mercado Pago**
+  - [x] Planificador de menú semanal (hasta 7 comidas con unificación de ingredientes en la lista)
+  - [x] Estructura de licencias de hogar (plan base vs lifetime premium)
+  - [x] Integración de Mercado Pago (pago único por hogar, cotización USD/ARS simulada/configurable)
+  - [x] Edge Function para webhook / creación de preferencia de pago
+- [x] **Verificación y Entrega**
+  - [x] Build exitoso y tests pasando (26/26 pruebas aprobadas)
+  - [x] Documentación `SETUP.md` clara y accesible para usuarios no técnicos
+  - [x] Verificación de arranque de la app
+
+---
+
+# Ronda 2+3
+
+- [x] **Bloque 0: Línea Base, Git y Diagnóstico Inicial**
+  - [x] Ejecución de tests y build de línea base
+  - [x] Inicialización de repositorio local Git y `.gitignore`
+  - [x] Creación de `docs/PENDIENTES.md` y commit inicial
+- [ ] **Bloque 1: Pagos con Mercado Pago (Servidor, Webhook con Firma, RLS)**
+  - [ ] Eliminación de toda activación de plan en cliente / modo simulado
+  - [ ] Tablas SQL `plans`, `licenses`, `payments`, `exchange_rates` con RLS estricto (solo lectura para miembros, solo service role para escritura)
+  - [ ] Edge Function `create-checkout` (cálculo de monto en servidor, external_reference único, payment pendiente)
+  - [ ] Edge Function `mp-webhook` (verificación cabecera `x-signature` con secreto, consulta a API MP, idempotencia, coincidencia de monto/moneda)
+  - [ ] Páginas de retorno pasivas (solo consulta en tiempo real, no activan)
+  - [ ] Tabla de tipos de cambio con control de sanidad y límites centralizados por plan
+  - [ ] Script seguro en `SETUP.md` para otorgar plan con service role a hogares de prueba
+  - [ ] Tests de webhook (firma válida/inválida, monto incorrecto, duplicados, RLS no modificable)
+- [ ] **Bloque 2: Investigación de Ideas en GitHub**
+  - [ ] Búsqueda acotada de repositorios públicos permisivos en los 5 temas
+  - [ ] Creación de `docs/REFERENCIAS.md` con hallazgos, qué se rescata y qué se descarta
+  - [ ] Registro de decisiones en `docs/DECISIONES.md`
+- [ ] **Bloque 3: Corregir el Chef (Fidelidad al Plato)**
+  - [ ] Sección FIDELIDAD AL PLATO y campo previo `analisis_plato` en prompt del sistema
+  - [ ] Actualización de esquemas Zod
+  - [ ] Pruebas de regresión "debe incluir" / "no debe incluir" (milanesa puré de zapallo sin papa, etc.)
+  - [ ] Pruebas end-to-end de modos cocinar y sugerir
+  - [ ] Actualización de `docs/chef-quality-report.md`
+- [ ] **Bloque 4: Texto Escrito a Mano (Catálogo >=600 ítems, Ortografía, Categorías)**
+  - [ ] Catálogo local offline con >= 600 productos de Argentina con sinónimos y categorías
+  - [ ] Pipeline único de procesamiento de texto (separadores, normalización, Levenshtein, calce más largo)
+  - [ ] Nuevo modo de IA `interpretar_items` con caché global y cuota propia (200/mes)
+  - [ ] Asignación automática de categorías y memoria de cambios por hogar
+  - [ ] Cruce aproximado entre chef y despensa
+  - [ ] Suite de pruebas de ortografía y segmentación
+- [ ] **Bloque 5: Botones de Vaciar con Deshacer**
+  - [ ] Botones para vaciar lista, vaciar despensa y vaciar comprados con protección
+  - [ ] Borrado lógico inmediato y botón "Deshacer" por 10 segundos
+  - [ ] Sincronización en tiempo real y offline
+- [ ] **Bloque 6: Menú Semanal Mejorado**
+  - [ ] Panel de comidas por día (desayuno, almuerzo, merienda, cena) y atajo global
+  - [ ] Objetivos / perfiles de usuario, disclaimer de salud fijo
+  - [ ] Generación en paralelo por día respetando cuota de IA (cuenta como 3 consultas)
+  - [ ] Modo de prompt `menu` y lista unificada
+  - [ ] Control de acceso por plan
+- [ ] **Bloque 7: Precios y Estudio SEPA / Precios Claros**
+  - [ ] Precio opcional por ítem, total estimado aproximado y memoria por hogar
+  - [ ] Costo aproximado por receta
+  - [ ] Investigación documentada en `docs/PRECIOS.md` sobre SEPA / Precios Claros
+- [ ] **Bloque 8: Hogares Multiusuario y Guías de Despliegue**
+  - [ ] Pruebas automáticas con 2 usuarios simulados (sincronización en vivo y aislamiento RLS)
+  - [ ] Guía de prueba local con dos navegadores en `SETUP.md`
+  - [ ] Creación de `docs/DEPLOY.md` (Vercel, Netlify, Cloudflare Pages)
+- [ ] **Bloque 9: Revisión Final Completa (QA)**
+  - [ ] Recorrido en viewports móvil (390x844) y escritorio
+  - [ ] Chequeo de consola, red, service worker, manifest PWA
+  - [ ] Creación de `docs/QA-REPORT.md`
+  - [ ] Creación de `docs/RONDA2-3.md`
+  - [ ] Actualización de SKILL.md, SETUP.md y task.md

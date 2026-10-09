@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+    <linearGradient id="chefGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+
+  <!-- Subtle Inner Glow Ring -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4"/>
+
+  <!-- Main Shopping Basket / Cart Body -->
+  <g filter="url(#shadow)">
+    <!-- Cart Base Grid -->
+    <path d="M120 220 L150 380 Q155 400 180 400 L332 400 Q357 400 362 380 L392 220 Z" 
+          fill="#ffffff" fill-opacity="0.95" />
+    
+    <!-- Cart Basket Rim -->
+    <rect x="100" y="205" width="312" height="24" rx="12" fill="#ffffff" />
+    
+    <!-- Basket Handles -->
+    <path d="M180 205 C180 130 332 130 332 205" 
+          fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round"/>
+  </g>
+
+  <!-- Chef Hat on top with Badge Glow -->
+  <g transform="translate(186, 175) scale(0.7)" filter="url(#shadow)">
+    <!-- Chef Hat Base -->
+    <path d="M60 160 L140 160 L135 190 L65 190 Z" fill="#ffffff"/>
+    <rect x="55" y="185" width="90" height="15" rx="7" fill="url(#chefGrad)"/>
+    
+    <!-- Chef Hat Puffs -->
+    <path d="M50 160 C10 130 20 70 65 75 C75 30 125 30 135 75 C180 70 190 130 150 160 Z" 
+          fill="url(#chefGrad)"/>
+          
+    <!-- Sparkle Stars for AI -->
+    <path d="M100 80 Q100 110 115 110 Q100 110 100 140 Q100 110 85 110 Q100 110 100 80 Z" fill="#ffffff"/>
+  </g>
+
+  <!-- Little Checkmark Badge -->
+  <circle cx="370" cy="360" r="42" fill="#10b981" filter="url(#shadow)" />
+  <path d="M352 360 L365 373 L388 348" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

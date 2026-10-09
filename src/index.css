@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Deshabilitar tap highlight azul en móviles */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Clases de utilidad personalizadas */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dark .glass-header {
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Efectos de pulso sutil para elementos activos del chef */
+@keyframes chef-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(249, 115, 22, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(249, 115, 22, 0.65);
+  }
+}
+
+.animate-chef-glow {
+  animation: chef-glow 2.5s infinite ease-in-out;
+}
+
+/* Botones de acción fáciles de tocar con una mano (mínimo 48px touch target) */
+.touch-target {
+  min-height: 48px;
+  min-width: 48px;
+}
