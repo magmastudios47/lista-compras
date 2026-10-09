@@ -7,6 +7,8 @@ import {
   ShoppingItem,
 } from '../../types';
 import { useChefAi } from '../../hooks/useChefAi';
+import { useHousehold } from '../../context/HouseholdContext';
+import { calculateRecipeEstimatedCost } from '../../lib/priceMemory';
 import {
   Sparkles,
   CookingPot,
@@ -19,6 +21,7 @@ import {
   Clock,
   ArrowRight,
   ShieldAlert,
+  Tag,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,6 +38,7 @@ export const ChefModal: React.FC<ChefModalProps> = ({
   pantryItems,
   onAddIngredientsToShoppingList,
 }) => {
+  const { household } = useHousehold();
   const { loading, error, askToCook, askToSuggest, remainingQueries } = useChefAi();
 
   const [activeTab, setActiveTab] = useState<'cocinar' | 'sugerir'>('cocinar');
@@ -307,6 +311,21 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                     <Clock className="w-3 h-3" /> {cookPreview.response.receta.tiempo_minutos || 40} min
                   </span>
                 </div>
+                {/* Costo estimado por receta */}
+                {(() => {
+                  const est = calculateRecipeEstimatedCost(
+                    cookPreview.response.ingredientes,
+                    household?.id
+                  );
+                  return (
+                    <div className="mt-2 pt-2 border-t border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between text-xs">
+                      <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
+                      <span className="font-bold text-amber-950 dark:text-amber-100">
+                        {est.formattedEstimate}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -470,6 +489,19 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                       <span>•</span>
                       <span>{rec.ingredientes.length} ingredientes</span>
                     </div>
+
+                    {/* Costo estimado en tarjeta sugerida */}
+                    {(() => {
+                      const est = calculateRecipeEstimatedCost(rec.ingredientes, household?.id);
+                      return (
+                        <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 dark:text-slate-400">Costo aproximado:</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {est.formattedEstimate}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -487,6 +519,21 @@ export const ChefModal: React.FC<ChefModalProps> = ({
               <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
                 {selectedSuggestRecipe.por_que_conviene}
               </p>
+              {/* Costo estimado */}
+              {(() => {
+                const est = calculateRecipeEstimatedCost(
+                  selectedSuggestRecipe.ingredientes,
+                  household?.id
+                );
+                return (
+                  <div className="mt-2 pt-1.5 border-t border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between text-xs">
+                    <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
+                    <span className="font-bold text-amber-950 dark:text-amber-100">
+                      {est.formattedEstimate}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="space-y-1.5 max-h-56 overflow-y-auto">

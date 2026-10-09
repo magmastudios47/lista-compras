@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Category, ShoppingItem, Unit } from '../../types';
 import { CATEGORIES } from '../../lib/constants';
-import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag, MoreVertical, X, AlertTriangle } from 'lucide-react';
+import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag, MoreVertical, X, AlertTriangle, Tag } from 'lucide-react';
 import { AddItemDrawer } from './AddItemDrawer';
+import { saveHouseholdPrice } from '../../lib/priceMemory';
 
 interface ShoppingListProps {
   items: ShoppingItem[];
@@ -21,6 +22,7 @@ interface ShoppingListProps {
   } | null;
   onUndoClear: () => Promise<void>;
   onCommitClearNow?: () => Promise<void>;
+  onUpdateItem?: (id: string, updates: Partial<ShoppingItem>) => Promise<void>;
   onAddToPantryPrompt: (item: ShoppingItem) => void;
   onOpenChefModal: () => void;
 }
@@ -33,6 +35,7 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
   onAddItem,
   onToggleBought,
   onDeleteItem,
+  onUpdateItem,
   onClearBought,
   onClearAll,
   undoState,
@@ -45,6 +48,8 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
   const [showBought, setShowBought] = useState(true);
   const [itemJustBought, setItemJustBought] = useState<ShoppingItem | null>(null);
   const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
+  const [editingPriceItemId, setEditingPriceItemId] = useState<string | null>(null);
+  const [newPriceInput, setNewPriceInput] = useState<string>('');
 
   // Agrupamiento por categorías
   const groupedPending = CATEGORIES.reduce((acc, cat) => {
@@ -78,9 +83,9 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
       <div className="mb-3 flex items-center justify-between gap-2">
         {totalEstimated > 0 ? (
           <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center gap-2 text-xs">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto:</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto estimado:</span>
             <span className="font-bold text-slate-800 dark:text-slate-200">
-              ${totalEstimated.toLocaleString('es-AR')} ARS
+              ${totalEstimated.toLocaleString('es-AR')} aprox.
             </span>
           </div>
         ) : (
@@ -215,12 +220,63 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
                               <span className="truncate">por {item.created_by_name}</span>
                             </>
                           )}
-                          {item.estimated_price && (
+                          {editingPriceItemId === item.id ? (
+                            <div className="flex items-center gap-1 mt-1">
+                              <input
+                                type="number"
+                                autoFocus
+                                value={newPriceInput}
+                                onChange={(e) => setNewPriceInput(e.target.value)}
+                                placeholder="ARS"
+                                className="w-20 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                              />
+                              <button
+                                onClick={async () => {
+                                  const parsed = parseFloat(newPriceInput);
+                                  if (!isNaN(parsed) && parsed > 0) {
+                                    if (onUpdateItem) await onUpdateItem(item.id, { estimated_price: parsed });
+                                    saveHouseholdPrice(item.name, parsed, item.household_id);
+                                  }
+                                  setEditingPriceItemId(null);
+                                }}
+                                className="px-1.5 py-0.5 bg-emerald-500 text-white rounded text-[10px] font-bold"
+                              >
+                                OK
+                              </button>
+                              <button
+                                onClick={() => setEditingPriceItemId(null)}
+                                className="p-0.5 text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
                             <>
-                              <span>•</span>
-                              <span className="text-slate-600 dark:text-slate-300 font-medium">
-                                ${item.estimated_price}
-                              </span>
+                              {item.estimated_price ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPriceItemId(item.id);
+                                    setNewPriceInput(String(item.estimated_price));
+                                  }}
+                                  className="text-slate-600 dark:text-slate-300 font-semibold hover:underline"
+                                  title="Editar precio"
+                                >
+                                  • ${item.estimated_price}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPriceItemId(item.id);
+                                    setNewPriceInput('');
+                                  }}
+                                  className="text-[10px] text-slate-400 hover:text-patagonia-600 flex items-center gap-0.5"
+                                  title="Cargar precio"
+                                >
+                                  • <Tag className="w-2.5 h-2.5" /> +Precio
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

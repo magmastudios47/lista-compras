@@ -120,8 +120,23 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - **Panel configurable por día**: Permite elegir qué comidas planificar (`desayuno`, `almuerzo`, `merienda`, `cena`) para cada día de la semana, con atajos rápidos ("Todas las comidas", "Solo almuerzo/cena", "Limpiar").
   - **Perfiles y seguridad**: Selección rápida de perfiles (Deportista, Bajar de peso, Ganar masa muscular, Niños, etc.) y campo libre. Se implementó un aviso fijo obligatorio: *"Son sugerencias generales, no reemplazan a un nutricionista o profesional de la salud"*, con advertencias automáticas ante condiciones médicas declaradas (diabetes, celiaquía, etc.).
   - **Fidelidad al Plato en cada comida**: Toda comida incluye `analisis_plato` para justificar cada ingrediente según el pedido exacto sin ingredientes inventados.
-  - **Gating de Plan y Costo de Cuota**: Exclusivo para hogares con plan Premium; consume 3 consultas del límite mensual centralizado por hogar.
   - **Lista unificada en el servidor/cliente**: Los ingredientes de todas las comidas se unifican sumando cantidades con unidades compatibles (`mergeDuplicateIngredients`) y se descuentan de forma determinista contra la despensa (`calculatePantryDiscounts`), permitiendo desmarcar ingredientes antes de confirmar.
+
+---
+
+### Decisión 13: Memoria de Precios por Hogar, Estimación por Receta y Estudio SEPA / Precios Claros
+- **Contexto**: Los usuarios necesitan tener visibilidad del costo estimado del changuito y de las recetas sin fricción en el súper, recordando los precios cargados previamente por su propia familia.
+- **Decisión**:
+  - **Presupuesto discreto con leyenda "aprox."**: El total estimado en el encabezado de la lista se presenta discretamente con la leyenda fija `${total} aprox.` para no inducir a falsas precisiones.
+  - **Memoria de precios por hogar (`priceMemory.ts`)**: Todo precio ingresado se guarda por nombre normalizado aislado por `household_id`. Al escribir el producto en el drawer, se sugiere automáticamente el último precio pagado con un botón rápido de "Aplicar".
+  - **Estimación de costo por receta**:
+    - Si todos los ingredientes tienen precio recordado, muestra `$X aprox.`.
+    - Si faltan precios, indica con precisión cuántos ingredientes faltan: `Faltan precios de N ingredientes`.
+  - **Viabilidad SEPA / Precios Claros (`docs/PRECIOS.md`)**:
+    - Se constató que el dataset nacional oficial del SEPA (Res. 12/2016) publica entre 10 y 15 millones de filas diarias en archivos masivos ZIP/CSV sin API REST en tiempo real.
+    - Para Junín de los Andes, la cadena censada obligada es La Anónima.
+    - Se definió una arquitectura backend de procesamiento batch nocturno que filtre únicamente las sucursales patagónicas y canasta básica, descartando procesar el archivo completo en el cliente móvil.
+
 
 
 

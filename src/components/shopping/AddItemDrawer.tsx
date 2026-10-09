@@ -3,6 +3,7 @@ import { Category, Unit } from '../../types';
 import { CATEGORIES, UNITS } from '../../lib/constants';
 import { Plus, Minus, X, Tag, Sparkles } from 'lucide-react';
 import { processHandwrittenText, saveHouseholdCategoryOverride } from '../../lib/textPipeline';
+import { getHouseholdPrice, saveHouseholdPrice } from '../../lib/priceMemory';
 import { useHousehold } from '../../context/HouseholdContext';
 
 interface AddItemDrawerProps {
@@ -23,15 +24,21 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
   const [category, setCategory] = useState<Category>('almacen');
   const [userOverrodeCategory, setUserOverrodeCategory] = useState(false);
   const [estimatedPrice, setEstimatedPrice] = useState<string>('');
+  const [suggestedHouseholdPrice, setSuggestedHouseholdPrice] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [autoSuggestedCat, setAutoSuggestedCat] = useState<string | null>(null);
 
-  // Autocategorización en vivo al escribir
+  // Autocategorización y sugerencia de precio en vivo al escribir
   useEffect(() => {
     if (!name.trim()) {
       setAutoSuggestedCat(null);
+      setSuggestedHouseholdPrice(null);
       return;
     }
+
+    // Buscar si hay precio recordado para este producto en el hogar
+    const remembered = getHouseholdPrice(name.trim(), household?.id);
+    setSuggestedHouseholdPrice(remembered);
 
     if (!userOverrodeCategory) {
       const processed = processHandwrittenText(name, household?.id);
@@ -84,6 +91,11 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
         // Recordar preferencia del usuario para este producto en su hogar
         if (userOverrodeCategory) {
           saveHouseholdCategoryOverride(singleName, finalCategory, household?.id);
+        }
+
+        // Recordar precio para futuras compras del hogar
+        if (priceNum && priceNum > 0) {
+          saveHouseholdPrice(singleName, priceNum, household?.id);
         }
 
         await onAdd(singleName, quantity, unit, finalCategory, priceNum);
@@ -243,6 +255,18 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
               placeholder="Ej: 2500"
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-patagonia-500"
             />
+            {suggestedHouseholdPrice !== null && (
+              <button
+                type="button"
+                onClick={() => setEstimatedPrice(String(suggestedHouseholdPrice))}
+                className="mt-1.5 text-[11px] text-patagonia-600 dark:text-patagonia-400 font-medium flex items-center gap-1.5 hover:underline"
+              >
+                <span>💡 Recordado en casa: ${suggestedHouseholdPrice} aprox.</span>
+                <span className="text-[10px] font-bold bg-patagonia-100 dark:bg-patagonia-950 text-patagonia-700 dark:text-patagonia-300 px-1.5 py-0.2 rounded-md">
+                  Aplicar
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Botón de Confirmación grande para una sola mano */}

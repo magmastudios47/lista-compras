@@ -45,6 +45,7 @@ export const App: React.FC = () => {
     addItem,
     toggleBought,
     deleteItem,
+    updateItem,
     clearBoughtItems,
     clearAllItems,
     undoClearShopping,
@@ -132,6 +133,7 @@ export const App: React.FC = () => {
             onAddItem={addItem}
             onToggleBought={toggleBought}
             onDeleteItem={deleteItem}
+            onUpdateItem={updateItem}
             onClearBought={clearBoughtItems}
             onClearAll={clearAllItems}
             undoState={undoShoppingState}

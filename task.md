@@ -79,10 +79,10 @@
   - [x] Generación en paralelo por día respetando cuota de IA (cuenta como 3 consultas)
   - [x] Modo de prompt `menu` y lista unificada
   - [x] Control de acceso por plan
-- [ ] **Bloque 7: Precios y Estudio SEPA / Precios Claros**
-  - [ ] Precio opcional por ítem, total estimado aproximado y memoria por hogar
-  - [ ] Costo aproximado por receta
-  - [ ] Investigación documentada en `docs/PRECIOS.md` sobre SEPA / Precios Claros
+- [x] **Bloque 7: Precios y Estudio SEPA / Precios Claros**
+  - [x] Precio opcional por ítem, total estimado aproximado y memoria por hogar
+  - [x] Costo aproximado por receta
+  - [x] Investigación documentada en `docs/PRECIOS.md` sobre SEPA / Precios Claros
 - [ ] **Bloque 8: Hogares Multiusuario y Guías de Despliegue**
   - [ ] Pruebas automáticas con 2 usuarios simulados (sincronización en vivo y aislamiento RLS)
   - [ ] Guía de prueba local con dos navegadores en `SETUP.md`
