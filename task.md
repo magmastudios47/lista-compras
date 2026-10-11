@@ -107,13 +107,13 @@
   - [x] Variables de modelo `GEMINI_MODEL_CHEF` y `GEMINI_MODEL_FAST` según lista oficial vigente, temperatura 0.3-0.4 y reasoning/thinking
   - [x] Vista previa del chef con receta colapsable antes de ingredientes
   - [x] Suite de pruebas de regresión culinaria (debe incluir / no debe incluir), platos no catalogados y reporte en `docs/chef-quality-report.md`
-- [ ] **Bloque 2: Menú Semanal (Variedad, Bebidas y Aviso Único)**
-  - [ ] Flujo en 2 pasos: Paso A (`planificar_semana` sin ingredientes) + Paso B (detalle de ingredientes por día)
-  - [ ] Validador de variedad en servidor (platos únicos por comida en la semana, rotación de proteína máx 2 días seguidos, >=4 bases desayuno/merienda)
-  - [ ] Bebida incluida y variada en desayunos y meriendas (ingredientes sumados a la lista excepto básicos de despensa)
-  - [ ] Adaptación de plan a perfil/objetivo con `por_que_encaja` específico
-  - [ ] Aviso único: eliminar duplicación de cartel amarillo y rojo
-  - [ ] Actualización de prompt del sistema (`planificar_semana`) y pruebas de menú completo (7 días x 4 comidas) con medición de llamadas a IA
+- [x] **Bloque 2: Menú Semanal (Variedad, Bebidas y Aviso Único)**
+  - [x] Flujo en 2 pasos: Paso A (`planificar_semana` sin ingredientes) + Paso B (detalle de ingredientes por día)
+  - [x] Validador de variedad en servidor (platos únicos por comida en la semana, rotación de proteína máx 2 días seguidos, >=4 bases desayuno/merienda)
+  - [x] Bebida incluida y variada en desayunos y meriendas (ingredientes sumados a la lista excepto básicos de despensa)
+  - [x] Adaptación de plan a perfil/objetivo con `por_que_encaja` específico
+  - [x] Aviso único: eliminar duplicación de cartel amarillo y rojo
+  - [x] Actualización de prompt del sistema (`planificar_semana`) y pruebas de menú completo (7 días x 4 comidas) con medición de llamadas a IA
 - [ ] **Bloque 3: Despensa Automática al Marcar Comprado**
   - [ ] Configuración de hogar "Al marcar como comprado": Preguntar / Sumar automáticamente / No sumar (sincronizada en hogar)
   - [ ] Modo automático: suma inmediata por normalizador, toast con Deshacer y reversión si se desmarca

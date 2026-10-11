@@ -124,10 +124,12 @@ export const MealTypeEnum = z.enum(['desayuno', 'almuerzo', 'merienda', 'cena'])
 export const MenuItemMealSchema = z.object({
   tipo: MealTypeEnum,
   nombre: z.string(),
+  bebida: z.string().nullable().optional(),
   porciones: z.number().default(2),
   tiempo_minutos: z.number().optional(),
   por_que_encaja: z.string().optional(),
-  analisis_plato: z.array(z.string()).default([]),
+  pasos: z.array(z.string()).optional().default([]),
+  analisis_plato: z.array(z.string()).optional().default([]),
   ingredientes: z.array(ChefIngredientSchema).default([]),
 });
 
@@ -159,6 +161,21 @@ export const PlanificarSemanaResponseSchema = z.object({
   mensaje: z.string().nullable().default(null),
   aclaracion: z.string().nullable().default(null),
   comidas: z.array(PlanificarSemanaMealSchema).default([]),
+  advertencias: z.array(z.string()).default([]),
+});
+
+export const DayMealDetailSchema = z.object({
+  tipo: MealTypeEnum,
+  plato: z.string(),
+  bebida: z.string().nullable().optional(),
+  pasos: z.array(z.string()).default([]),
+  ingredientes: z.array(ChefIngredientSchema).default([]),
+});
+
+export const DetalleDiaMenuResponseSchema = z.object({
+  modo: z.literal('detalle_dia_menu'),
+  dia: z.string(),
+  comidas: z.array(DayMealDetailSchema).default([]),
   advertencias: z.array(z.string()).default([]),
 });
 

@@ -9,11 +9,13 @@ import {
   InterpretItemsResponseSchema,
   MenuResponseSchema,
   PlanificarSemanaResponseSchema,
+  DetalleDiaMenuResponseSchema,
 } from '../_shared/schemas.ts';
 import {
   filterAbsurdIngredients,
   validateIngredientsAgainstSteps,
 } from '../_shared/culinarySanity.ts';
+import { validateWeeklyPlanVariety } from '../_shared/weeklyMenuValidator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,7 +73,7 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id, dias_config, objetivo_perfil, objetivo_detalle, platos_obligatorios, platos_ya_elegidos } = body;
 
-    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'planificar_semana'];
+    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'planificar_semana', 'detalle_dia_menu'];
     if (!modo || !allowedModes.includes(modo)) {
       return new Response(
         JSON.stringify({ error: 'Modo inválido.' }),
@@ -82,8 +84,9 @@ serve(async (req: Request) => {
     // 2. Control de Acceso por Plan y Cuota Mensual
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
-    const isMenuMode = modo === 'menu' || modo === 'planificar_semana';
-    const queryCost = isMenuMode ? 3 : 1;
+    const isMenuMode = modo === 'menu' || modo === 'planificar_semana' || modo === 'detalle_dia_menu';
+    // El detalle por día no descuenta consultas extra porque ya se cobró el menú
+    const queryCost = modo === 'detalle_dia_menu' ? 0 : (isMenuMode ? 3 : 1);
 
     if (household_id) {
       // Si es modo menu / planificar_semana, verificar plan Premium
@@ -191,6 +194,7 @@ serve(async (req: Request) => {
     if (modo === 'interpretar_despensa') validator = InterpretPantryResponseSchema.parse;
     if (modo === 'menu') validator = MenuResponseSchema.parse;
     if (modo === 'planificar_semana') validator = PlanificarSemanaResponseSchema.parse;
+    if (modo === 'detalle_dia_menu') validator = DetalleDiaMenuResponseSchema.parse;
 
     const geminiResult = await gemini.generateChefResponse(
       {
@@ -206,6 +210,8 @@ serve(async (req: Request) => {
           objetivo_detalle,
           platos_obligatorios,
           platos_ya_elegidos,
+          dia: body.dia,
+          comidas: body.comidas,
         },
       },
       validator
@@ -222,6 +228,46 @@ serve(async (req: Request) => {
         const filtered = filterAbsurdIngredients(r.nombre, r.ingredientes || []);
         const validated = validateIngredientsAgainstSteps(r.pasos || r.receta?.pasos, filtered);
         return { ...r, ingredientes: validated };
+      });
+    } else if (modo === 'planificar_semana' && outputData.comidas) {
+      // Validador de variedad en servidor con reintento único
+      const mandatoryArr = platos_obligatorios ? [platos_obligatorios] : [];
+      const varietyResult = validateWeeklyPlanVariety(outputData.comidas, mandatoryArr);
+      if (!varietyResult.valid) {
+        try {
+          const retryResult = await gemini.generateChefResponse(
+            {
+              userData: {
+                modo,
+                pedido: `${pedido || ''} - IMPORTANTE: El plan anterior violó las siguientes reglas de variedad: ${varietyResult.errors.join('; ')}. Por favor regenerá el plan asegurando variedad total sin repetir platos ni proteínas consecutivas.`,
+                personas: personas ? Number(personas) : 4,
+                restricciones: Array.isArray(restricciones) ? restricciones : [],
+                dias_config,
+                objetivo_perfil,
+                objetivo_detalle,
+                platos_obligatorios,
+              },
+            },
+            validator
+          );
+          if (retryResult?.data) {
+            outputData = retryResult.data;
+            const recheck = validateWeeklyPlanVariety(outputData.comidas, mandatoryArr);
+            if (!recheck.valid) {
+              outputData.advertencias = outputData.advertencias || [];
+              outputData.advertencias.push('Nota: El menú tiene algunas repeticiones leves para ajustarse a los parámetros solicitados.');
+            }
+          }
+        } catch {
+          outputData.advertencias = outputData.advertencias || [];
+          outputData.advertencias.push('Nota: El menú tiene algunas repeticiones leves para ajustarse a los parámetros solicitados.');
+        }
+      }
+    } else if (modo === 'detalle_dia_menu' && Array.isArray(outputData.comidas)) {
+      outputData.comidas = outputData.comidas.map((c: any) => {
+        const filtered = filterAbsurdIngredients(c.plato, c.ingredientes || []);
+        const validated = validateIngredientsAgainstSteps(c.pasos || [], filtered);
+        return { ...c, ingredientes: validated };
       });
     }
 
@@ -244,7 +290,7 @@ serve(async (req: Request) => {
         status: 'success',
       });
 
-      if (!isInterpretationMode && householdData) {
+      if (!isInterpretationMode && householdData && queryCost > 0) {
         await supabaseClient
           .from('households')
           .update({
@@ -254,7 +300,7 @@ serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify(geminiResult.data), {
+    return new Response(JSON.stringify(outputData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err: any) {

@@ -151,3 +151,21 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   4. **Validación Servidor de Ingredientes contra Pasos**: Los ingredientes de la lista que no aparezcan en los pasos se marcan automáticamente como `opcional: true` y quedan destildados por defecto en la vista previa del carrito.
   5. **Modelos y Thinking**: Se desacopló `GEMINI_MODEL_CHEF` (`gemini-2.5-flash` a temperatura 0.35 con pensamiento leve de 1024 tokens) de `GEMINI_MODEL_FAST` (`gemini-2.0-flash-lite` para interpretar ítems), logrando máxima precisión culinaria y óptimo consumo de cuota gratuita.
   6. **UI**: Se agregó un acordeón colapsable en la vista previa del chef para consultar los pasos detallados de la receta antes de agregar los faltantes a la lista.
+
+---
+
+### Decisión 17: Ronda 4 Bloque 2 - Menú Semanal con Flujo en Dos Pasos, Variedad Garantizada y Aviso Único
+- **Contexto**: Anteriormente el planificador ejecutaba llamadas diarias independientes que causaban repetición de platos (ej. el mismo desayuno los 7 días con perfil Deportista), carecía de bebidas para desayunos/meriendas y mostraba carteles de advertencia duplicados en la UI.
+- **Decisión**:
+  1. **Flujo en Dos Pasos**:
+     - **Paso A (`planificar_semana`)**: Una sola llamada que genera el cronograma completo de platos, bebidas y justificaciones nutricionales (`por_que_encaja`) sin ingredientes. No utiliza la caché de respuestas previa.
+     - **Paso B (`detalle_dia_menu`)**: Detalle de ingredientes y recetas compactas (3-6 pasos) generado por día (hasta 7 llamadas) con rate limit pacing (200ms entre días). Cada plato aplica las reglas de "RECETA PRIMERO" y validación silenciosa.
+     - **Medición de llamadas**: Un menú completo de 7 días consume exactamente **8 llamadas a la IA** (1 de Paso A + 7 de Paso B; o 9 en caso de un reintento por variedad), cubiertas por el cómputo de 3 consultas globales del usuario.
+  2. **Validador de Variedad en el Servidor (`weeklyMenuValidator.ts`)**:
+     - No se repiten platos del mismo tipo en la semana (salvo pedidos obligatorios del usuario).
+     - No más de 2 días seguidos con la misma proteína principal.
+     - Desayunos y meriendas rotan al menos 4 bases distintas (avena, tostadas, yogur, panqueques, huevos, frutas, etc.).
+     - Si la IA viola las reglas, se reintenta automáticamente una vez informando los errores sin descontar consultas adicionales.
+  3. **Bebidas en Desayuno y Merienda**: Cada desayuno y merienda incluye una bebida variada (café con leche, mate cocido, licuado, té, yogur bebible), cuyos insumos se suman a la lista excepto básicos de despensa.
+  4. **Aviso Único y Limpieza Visual**: Se eliminó la duplicación de carteles de advertencia. Solo se renderiza un banner amarillo permanente de recomendación general; el aviso rojo se reserva exclusivamente para advertencias médicas auténticas devueltas por la IA.
+

@@ -10,6 +10,11 @@ import {
   MenuDay,
   DiscountComparisonResult,
   PantryItem,
+  PlanificarSemanaMeal,
+  ChefPlanificarSemanaResponse,
+  DayMealDetail,
+  ChefDetalleDiaMenuResponse,
+  ChefIngredient,
 } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
@@ -17,6 +22,7 @@ import { calculatePantryDiscounts, mergeDuplicateIngredients } from '../lib/disc
 import { processHandwrittenText } from '../lib/textPipeline';
 import { filterAbsurdIngredients, validateIngredientsAgainstSteps } from '../lib/culinarySanityCheck';
 import { normalizeString } from '../lib/normalizer';
+import { validateWeeklyPlanVariety } from '../lib/weeklyMenuValidator';
 
 export function useChefAi() {
   const { household, remainingQueries, incrementChefUsage } = useHousehold();
@@ -250,7 +256,7 @@ export function useChefAi() {
     [interpretItems]
   );
 
-  // Modo Menú Semanal (cuenta como 3 consultas)
+  // Modo Menú Semanal (Flujo en dos pasos: Paso A planificar_semana + Paso B detalle_dia_menu)
   const generateWeeklyMenu = useCallback(
     async (params: {
       daysConfig: Array<{ dia: string; comidas: MealType[] }>;
@@ -272,27 +278,87 @@ export function useChefAi() {
 
         if (isConfigured && household) {
           try {
-            const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+            // PASO A: Planificar Semana (UNA sola llamada devuelve el plan de todas las comidas sin ingredientes)
+            const { data: stepAData, error: stepAError } = await supabase.functions.invoke('chef-ai', {
               body: {
-                modo: 'menu',
+                modo: 'planificar_semana',
                 dias_config: params.daysConfig,
                 objetivo_perfil: params.targetProfile,
                 objetivo_detalle: params.profileDetail,
                 personas: p,
                 platos_obligatorios: params.mandatoryDishes,
-                despensa: params.pantry.map((x) => x.name),
                 household_id: household.id,
               },
             });
 
-            if (!fnError && data) {
-              menuData = data as ChefMenuResponse;
-              // Incrementa 3 consultas
+            if (!stepAError && stepAData && Array.isArray(stepAData.comidas)) {
+              // Descuenta 3 consultas para el menú semanal completo una sola vez
               incrementChefUsage();
               incrementChefUsage();
               incrementChefUsage();
+
+              const planComidas: PlanificarSemanaMeal[] = stepAData.comidas;
+
+              // PASO B: Detalle de ingredientes con UNA llamada por día (hasta 7 días activos)
+              const activeDays = params.daysConfig.filter((d) => d.comidas.length > 0);
+              const builtDays: MenuDay[] = [];
+
+              for (const dayCfg of activeDays) {
+                const dayMeals = planComidas.filter(
+                  (m) => normalizeString(m.dia) === normalizeString(dayCfg.dia)
+                );
+
+                try {
+                  const { data: dayDetailData, error: dayDetailError } = await supabase.functions.invoke('chef-ai', {
+                    body: {
+                      modo: 'detalle_dia_menu',
+                      dia: dayCfg.dia,
+                      comidas: dayMeals.map((m) => ({
+                        tipo: m.tipo,
+                        plato: m.plato,
+                        bebida: m.bebida,
+                      })),
+                      personas: p,
+                      household_id: household.id,
+                    },
+                  });
+
+                  if (!dayDetailError && dayDetailData && Array.isArray(dayDetailData.comidas)) {
+                    builtDays.push({
+                      dia: dayCfg.dia,
+                      comidas: dayDetailData.comidas.map((c: any) => ({
+                        tipo: c.tipo,
+                        nombre: c.plato,
+                        bebida: c.bebida || null,
+                        porciones: p,
+                        por_que_encaja: dayMeals.find((m) => m.tipo === c.tipo)?.por_que_encaja,
+                        pasos: c.pasos || [],
+                        ingredientes: c.ingredientes || [],
+                      })),
+                    });
+                  } else {
+                    const localDay = generateMockDayMealDetail(dayCfg.dia, dayMeals, p, params.pantry);
+                    builtDays.push(localDay);
+                  }
+                } catch {
+                  const localDay = generateMockDayMealDetail(dayCfg.dia, dayMeals, p, params.pantry);
+                  builtDays.push(localDay);
+                }
+
+                // Pausa breve de 200ms para cuidar el rate limit
+                await new Promise((r) => setTimeout(r, 200));
+              }
+
+              menuData = {
+                modo: 'menu',
+                fuera_de_tema: false,
+                mensaje: null,
+                aclaracion: null,
+                dias: builtDays,
+                advertencias: stepAData.advertencias || [],
+              };
             } else {
-              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
+              console.warn('Edge Function chef-ai no disponible o error en Paso A, usando motor local:', stepAError);
               await new Promise((r) => setTimeout(r, 600));
               menuData = generateMockMenuResponse(params);
               incrementChefUsage();
@@ -308,6 +374,18 @@ export function useChefAi() {
           await new Promise((r) => setTimeout(r, 600));
           menuData = generateMockMenuResponse(params);
           incrementChefUsage();
+        }
+
+        // Eliminar duplicados del aviso fijo de salud en advertencias
+        if (menuData.advertencias) {
+          menuData.advertencias = menuData.advertencias.filter((adv) => {
+            const norm = normalizeString(adv);
+            return (
+              !norm.includes('nutricionista') &&
+              !norm.includes('sugerencias generales') &&
+              !norm.includes('profesional de la salud')
+            );
+          });
         }
 
         // Unificar ingredientes de todas las comidas del menú y descontar contra la despensa
@@ -1112,20 +1190,23 @@ function generateMockInterpretPantry(text: string): ChefInterpretPantryResponse 
   };
 }
 
-export function generateMockMenuResponse(params: {
+// ========================================================================
+// GENERADORES DEL MENÚ SEMANAL (RONDA 4: FLUJO EN DOS PASOS)
+// ========================================================================
+
+/**
+ * PASO A: Genera el plan semanal completo (solo platos y bebidas, sin ingredientes)
+ */
+export function generateMockPlanificarSemana(params: {
   daysConfig: Array<{ dia: string; comidas: MealType[] }>;
   targetProfile: string;
   profileDetail?: string;
   persons?: number;
   mandatoryDishes?: string;
-  pantry?: PantryItem[];
-}): ChefMenuResponse {
-  const p = params.persons || 4;
+}): ChefPlanificarSemanaResponse {
   const profile = params.targetProfile.toLowerCase();
   const detail = (params.profileDetail || '').toLowerCase();
-  const warnings: string[] = [
-    'Son sugerencias generales, no reemplazan a un nutricionista o profesional de la salud.',
-  ];
+  const warnings: string[] = [];
 
   if (
     detail.includes('diabet') ||
@@ -1139,204 +1220,615 @@ export function generateMockMenuResponse(params: {
     );
   }
 
-  // Plantillas de comidas argentinas adaptadas
-  const getMealForType = (
-    tipo: MealType,
-    dayName: string,
-    dayIndex: number
-  ): MenuItemMeal => {
-    if (tipo === 'desayuno') {
-      if (profile.includes('deport') || profile.includes('muscul')) {
-        return {
-          tipo: 'desayuno',
-          nombre: 'Huevos revueltos con tostadas y palta',
-          porciones: p,
-          tiempo_minutos: 15,
-          por_que_encaja: 'Aporte alto de proteínas y grasas saludables para arrancar el día.',
-          analisis_plato: ['huevos revueltos: huevo, manteca', 'tostadas: pan, palta'],
-          ingredientes: [
-            { nombre: 'huevo', cantidad: p * 2, unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
-            { nombre: 'pan de molde', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
-            { nombre: 'palta', cantidad: Math.ceil(p / 2), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-          ],
-        };
-      } else if (profile.includes('peso')) {
-        return {
-          tipo: 'desayuno',
-          nombre: 'Yogur con avena y manzana rallada',
-          porciones: p,
-          tiempo_minutos: 10,
-          por_que_encaja: 'Fibra saciante con bajo índice glucémico.',
-          analisis_plato: ['tazon: yogur natural, avena, manzana'],
-          ingredientes: [
-            { nombre: 'yogur natural', cantidad: p, unidad: 'unidad', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-            { nombre: 'avena', cantidad: p * 30, unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
-            { nombre: 'manzana', cantidad: p, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-          ],
-        };
+  // 7 Almuerzos distintos rotando proteínas (máx 2 días seguidos con la misma proteína)
+  const weeklyLunches = [
+    {
+      plato: 'Pechuga de pollo grillada con arroz y ensalada de espinaca',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Proteína magra de alto valor biológico y carbohidratos complejos para recuperación muscular.'
+        : 'Almuerzo liviano, saciante y nutritivo para mantener la energía de la tarde.',
+    },
+    {
+      plato: 'Milanesas de nalga al horno con puré de zapallo anco',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Aporte potente de hierro y aminoácidos con puré liviano libre de frituras.'
+        : 'Clásico familiar argentino preparado al horno para reducir grasas.',
+    },
+    {
+      plato: 'Filet de merluza al limón con papas al vapor y perejil',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Pescado blanco de fácil digestión con carbohidratos limpios antes de la actividad.'
+        : 'Aporte de fósforo y omega-3 con cocción suave y ligera.',
+    },
+    {
+      plato: 'Guiso casero de lentejas con verduras y calabaza',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Proteínas vegetales y hierro no hemo con excelente aporte de fibra prebiótica.'
+        : 'Plato de cuchara tradicional, reconfortante y económico para el hogar.',
+    },
+    {
+      plato: 'Tarta de zapallitos jugosa y queso cremoso',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Comida vegetariana ligera que no genera pesadez digestiva en la tarde.'
+        : 'Aprovecha verduras frescas de estación con masa crocante al horno.',
+    },
+    {
+      plato: 'Fideos cinta con salsa de tomate y albóndigas magras',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Carga energética de glucógeno y proteínas sabrosas para el entrenamiento.'
+        : 'Almuerzo rendidor de fin de semana que le gusta a toda la familia.',
+    },
+    {
+      plato: 'Asado tradicional de tira y vacío con ensalada mixta',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Proteínas completas y grasas naturales en el asado de domingo.'
+        : 'El almuerzo insignia de los domingos argentinos compartido en familia.',
+    },
+  ];
+
+  // 7 Cenas distintas rotando proteínas
+  const weeklyDinners = [
+    {
+      plato: 'Omelette de espinaca, cebolla y queso con ensalada de tomate',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Cena rápida alta en proteína de huevo y verduras frescas de fácil asimilación nocturna.'
+        : 'Cena digestiva, liviana y lista en 15 minutos.',
+    },
+    {
+      plato: 'Pastel de papas tradicional al horno con ensalada verde',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Reparación muscular nocturna con carne picada magra y puré casero.'
+        : 'Plato reconfortante clásico argentino con carne y puré gratinado.',
+    },
+    {
+      plato: 'Cazuela de pollo y calabaza con cebolla de verdeo',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Proteína blanca con betacarotenos de la calabaza sin grasas pesadas.'
+        : 'Guisado suave y aromático para disfrutar caliente.',
+    },
+    {
+      plato: 'Trucha patagónica a la plancha con puré de calabaza',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Ácidos grasos esenciales y proteína de alta calidad propia de la región andina.'
+        : 'Pescado fresco patagónico cocinado a la plancha con guarnición suave.',
+    },
+    {
+      plato: 'Pizza casera a la piedra de muzzarella con fainá',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Carbohidratos y proteínas lácteas de disfrute controlado el viernes a la noche.'
+        : 'Cena relajada de viernes hecha en casa con masa crocante.',
+    },
+    {
+      plato: 'Bondiola de cerdo braseada con batatas asadas',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Carne porcina sabrosa cocida a fuego lento con carbohidratos de la batata.'
+        : 'Corte jugoso y tierno al horno ideal para el sábado a la noche.',
+    },
+    {
+      plato: 'Sopa crema de calabaza con croutons y queso rallado',
+      bebida: null,
+      por_que_encaja: profile.includes('deport')
+        ? 'Hidratación y micronutrientes para cerrar la semana sin sobrecargar el estómago.'
+        : 'Cena reconfortante y depurativa para arrancar la semana livianos.',
+    },
+  ];
+
+  // 7 Desayunos rotando >= 4 bases (avena, tostadas, yogur, panqueques, huevo) y con bebida
+  const weeklyBreakfasts = [
+    {
+      plato: 'Avena cocida con banana y nueces',
+      bebida: 'Café con leche',
+      por_que_encaja: 'Carbohidratos de absorción lenta y algo de proteína para rendir en el entrenamiento de la mañana.',
+    },
+    {
+      plato: 'Tostadas con palta y huevo revuelto',
+      bebida: 'Jugo de naranja exprimido',
+      por_que_encaja: 'Grasas saludables monoinsaturadas y proteína completa para máxima saciedad matutina.',
+    },
+    {
+      plato: 'Yogur natural con granola y manzana rallada',
+      bebida: 'Té verde con limón',
+      por_que_encaja: 'Aporte de probióticos y fibra soluble que favorece la digestión antes de entrenar.',
+    },
+    {
+      plato: 'Panqueques de avena y manzana con miel',
+      bebida: 'Café con leche',
+      por_que_encaja: 'Energía limpia sin harinas refinadas para afrontar la actividad del día.',
+    },
+    {
+      plato: 'Huevos revueltos con tostadas de masa madre',
+      bebida: 'Té negro con limón',
+      por_que_encaja: 'Aporte proteico denso para mantener los niveles de energía estables.',
+    },
+    {
+      plato: 'Tostadas doradas con queso crema y miel',
+      bebida: 'Café cortado',
+      por_que_encaja: 'Desayuno rápido y clásico de fin de semana con energía inmediata.',
+    },
+    {
+      plato: 'Panqueques caseros con dulce de leche',
+      bebida: 'Submarino caliente',
+      por_que_encaja: 'Desayuno tradicional de domingo para disfrutar en familia con un toque dulce.',
+    },
+  ];
+
+  // 7 Meriendas rotando bases y con bebida
+  const weeklySnacks = [
+    {
+      plato: 'Tostadas de pan integral con queso untable',
+      bebida: 'Mate cocido con leche',
+      por_que_encaja: 'Merienda liviana que aporta calcio y carbohidratos complejos antes del entreno vespertino.',
+    },
+    {
+      plato: 'Licuado de banana con avena y galletitas de agua',
+      bebida: 'Licuado de banana con leche',
+      por_que_encaja: 'Recuperación de glucógeno y potasio post-entrenamiento de la tarde.',
+    },
+    {
+      plato: 'Yogur bebible con frutos secos',
+      bebida: 'Yogur para tomar',
+      por_que_encaja: 'Colación práctica y fresca con proteínas lácteas y grasas saludables.',
+    },
+    {
+      plato: 'Tostadas de masa madre con queso y dulce de membrillo',
+      bebida: 'Café con leche',
+      por_que_encaja: 'Energía reconfortante a media tarde sin recurrir a ultraprocesados.',
+    },
+    {
+      plato: 'Licuado de frutas de estación con galletitas de avena',
+      bebida: 'Licuado de frutas',
+      por_que_encaja: 'Aporte de antioxidantes y vitaminas naturales para cerrar la tarde activa.',
+    },
+    {
+      plato: 'Mate cebado con tostadas o tortas fritas',
+      bebida: 'Mate tradicional con yerba',
+      por_que_encaja: 'Costumbre argentina tradicional y reconfortante para la tarde del sábado.',
+    },
+    {
+      plato: 'Taza de chocolatada con galletitas caseras',
+      bebida: 'Chocolatada caliente',
+      por_que_encaja: 'Merienda clásica de domingo que le gusta a grandes y chicos.',
+    },
+  ];
+
+  const daysOrder = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+  const allMeals: PlanificarSemanaMeal[] = [];
+
+  params.daysConfig.forEach((dayCfg) => {
+    const dayNorm = normalizeString(dayCfg.dia);
+    let dayIdx = daysOrder.indexOf(dayNorm);
+    if (dayIdx < 0) dayIdx = 0;
+
+    dayCfg.comidas.forEach((tipo) => {
+      let mealInfo: { plato: string; bebida: string | null; por_que_encaja: string };
+
+      if (tipo === 'desayuno') {
+        mealInfo = weeklyBreakfasts[dayIdx % weeklyBreakfasts.length];
+      } else if (tipo === 'almuerzo') {
+        mealInfo = weeklyLunches[dayIdx % weeklyLunches.length];
+      } else if (tipo === 'merienda') {
+        mealInfo = weeklySnacks[dayIdx % weeklySnacks.length];
+      } else {
+        mealInfo = weeklyDinners[dayIdx % weeklyDinners.length];
       }
-      return {
-        tipo: 'desayuno',
-        nombre: 'Tostadas con queso crema y café con leche',
-        porciones: p,
-        tiempo_minutos: 10,
-        por_que_encaja: 'Desayuno clásico rioplatense, simple y rendidor.',
-        analisis_plato: ['tostadas: pan, queso crema', 'cafe con leche: leche, cafe'],
-        ingredientes: [
-          { nombre: 'pan', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
-          { nombre: 'queso crema', cantidad: 1, unidad: 'paquete', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-          { nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        ],
-      };
-    }
 
-    if (tipo === 'merienda') {
-      if (profile.includes('nino') || profile.includes('niño')) {
-        return {
-          tipo: 'merienda',
-          nombre: 'Licuado de banana con galletitas caseras',
-          porciones: p,
-          tiempo_minutos: 15,
-          por_que_encaja: 'Energía nutritiva y atractiva para los chicos.',
-          analisis_plato: ['licuado: banana, leche', 'galletitas: galletitas de avena'],
-          ingredientes: [
-            { nombre: 'banana', cantidad: p, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-            { nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-          ],
-        };
+      allMeals.push({
+        dia: dayCfg.dia,
+        tipo,
+        plato: mealInfo.plato,
+        bebida: mealInfo.bebida,
+        por_que_encaja: mealInfo.por_que_encaja,
+      });
+    });
+  });
+
+  return {
+    modo: 'planificar_semana',
+    fuera_de_tema: false,
+    mensaje: null,
+    aclaracion: null,
+    comidas: allMeals,
+    advertencias: warnings,
+  };
+}
+
+/**
+ * PASO B: Genera el detalle de recetas resumidas (3-6 pasos) e ingredientes para un día dado
+ */
+export function generateMockDayMealDetail(
+  dia: string,
+  dayMeals: PlanificarSemanaMeal[],
+  persons: number,
+  pantry: PantryItem[] = []
+): MenuDay {
+  const p = persons || 4;
+
+  const builtMeals: MenuItemMeal[] = dayMeals.map((meal) => {
+    const platoNorm = normalizeString(meal.plato);
+    const steps: string[] = [];
+    const ings: Array<{ nombre: string; cantidad: number; unidad: any; categoria: any; es_basico?: boolean }> = [];
+
+    // Desayunos
+    if (meal.tipo === 'desayuno') {
+      if (platoNorm.includes('avena')) {
+        steps.push(
+          `1. Calentar ${Math.round(p * 200)} ml de leche en una ollita chica a fuego medio.`,
+          `2. Agregar ${Math.round(p * 40)} g de avena en copos y cocinar revolviendo 3 minutos hasta espesar.`,
+          `3. Cortar ${p} banana en rodajas y picar ${Math.round(p * 20)} g de nueces.`,
+          '4. Servir la avena en un bol decorando con la banana y las nueces.',
+          '5. Preparar el café con leche caliente para acompañar.'
+        );
+        ings.push(
+          { nombre: 'avena', cantidad: Math.round(p * 40), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'leche', cantidad: Math.max(1, Math.round(p * 0.25)), unidad: 'l', categoria: 'lacteos' },
+          { nombre: 'banana', cantidad: p, unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'nueces', cantidad: Math.round(p * 20), unidad: 'g', categoria: 'almacen' }
+        );
+      } else if (platoNorm.includes('panqueque')) {
+        steps.push(
+          `1. Licuar ${Math.max(2, p)} huevo con ${Math.round(p * 50)} g de avena o harina y 1 manzana rallada.`,
+          '2. Calentar una sartén antiadherente con una gotita de aceite.',
+          '3. Volcar porciones de masa y dorar 2 minutos por lado.',
+          '4. Servir los panqueques tibios rociados con miel o dulce de leche.',
+          '5. Acompañar con la bebida caliente.'
+        );
+        ings.push(
+          { nombre: 'huevo', cantidad: Math.max(2, p), unidad: 'unidad', categoria: 'almacen' },
+          { nombre: 'avena', cantidad: Math.round(p * 50), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'manzana', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' }
+        );
+      } else if (platoNorm.includes('yogur')) {
+        steps.push(
+          `1. Servir ${p} unidad de yogur natural en compoteras individuales.`,
+          `2. Lavar y rallar ${p} manzana fresca.`,
+          `3. Incorporar ${Math.round(p * 30)} g de granola crocante sobre el yogur.`,
+          '4. Mezclar suavemente y servir fresco junto con la infusión caliente.'
+        );
+        ings.push(
+          { nombre: 'yogur natural', cantidad: p, unidad: 'unidad', categoria: 'lacteos' },
+          { nombre: 'granola', cantidad: Math.round(p * 30), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'manzana', cantidad: p, unidad: 'unidad', categoria: 'verduleria' }
+        );
+      } else {
+        // Tostadas / Huevo revuelto
+        steps.push(
+          `1. Batir ${Math.max(2, p * 2)} huevo con una pizca de sal.`,
+          '2. Cocinar los huevos en sartén a fuego bajo revolviendo hasta que queden cremosos.',
+          `3. Tostar ${Math.max(2, p * 2)} rodajas de pan.`,
+          `4. Pisar ${Math.max(1, Math.round(p * 0.5))} palta con gotas de limón y untar el pan tostado.`,
+          '5. Colocar los huevos revueltos sobre las tostadas y servir caliente con el jugo o café.'
+        );
+        ings.push(
+          { nombre: 'huevo', cantidad: Math.max(2, p * 2), unidad: 'unidad', categoria: 'almacen' },
+          { nombre: 'pan', cantidad: Math.max(2, p * 2), unidad: 'unidad', categoria: 'panaderia' },
+          { nombre: 'palta', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' }
+        );
       }
-      return {
-        tipo: 'merienda',
-        nombre: 'Mate o infusión con tostadas integrales y queso',
-        porciones: p,
-        tiempo_minutos: 10,
-        por_que_encaja: 'Merienda ligera que no interfiere con la cena.',
-        analisis_plato: ['infusion: yerba mate', 'tostadas: pan integral, queso'],
-        ingredientes: [
-          { nombre: 'yerba mate', cantidad: 1, unidad: 'paquete', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
-          { nombre: 'pan', cantidad: p * 2, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        ],
-      };
+    } else if (meal.tipo === 'merienda') {
+      if (platoNorm.includes('licuado')) {
+        steps.push(
+          `1. Pelar ${p} banana fresca.`,
+          `2. Colocar en licuadora junto con ${Math.max(1, Math.round(p * 0.25))} l de leche y ${Math.round(p * 20)} g de avena.`,
+          '3. Licuar a velocidad máxima por 1 minuto hasta lograr textura espumosa.',
+          `4. Servir el licuado bien frío acompañado de ${Math.round(p * 4)} galletitas de agua.`
+        );
+        ings.push(
+          { nombre: 'banana', cantidad: p, unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'leche', cantidad: Math.max(1, Math.round(p * 0.25)), unidad: 'l', categoria: 'lacteos' },
+          { nombre: 'galletitas', cantidad: 1, unidad: 'paquete', categoria: 'almacen' }
+        );
+      } else {
+        steps.push(
+          `1. Cortar ${Math.max(2, p * 2)} rebanadas de pan integral.`,
+          '2. Tostar en tostadora o plancha hasta dorar de ambos lados.',
+          '3. Untar con queso untable o queso crema.',
+          '4. Cebar el mate cocido o infusión caliente para disfrutar la tarde.'
+        );
+        ings.push(
+          { nombre: 'pan', cantidad: Math.max(2, p * 2), unidad: 'unidad', categoria: 'panaderia' },
+          { nombre: 'queso untable', cantidad: 1, unidad: 'paquete', categoria: 'lacteos' }
+        );
+      }
+    } else if (meal.tipo === 'almuerzo') {
+      if (platoNorm.includes('pollo')) {
+        steps.push(
+          `1. Limpiar y condimentar ${Math.round(p * 200)} g de pechuga de pollo con limón y sal.`,
+          `2. Cocinar ${Math.round(p * 70)} g de arroz en agua hirviendo con sal durante 15 minutos.`,
+          '3. Calentar una plancha a fuego fuerte y dorar las pechugas de pollo 5 minutos por lado.',
+          `4. Lavar ${Math.max(1, Math.round(p * 0.5))} atado de espinaca y armar ensalada fresca.`,
+          '5. Servir el pollo jugoso acompañado del arroz y la ensalada verde.'
+        );
+        ings.push(
+          { nombre: 'pechuga de pollo', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'arroz', cantidad: Math.round(p * 70), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'espinaca', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'atado', categoria: 'verduleria' }
+        );
+      } else if (platoNorm.includes('milanesa')) {
+        steps.push(
+          `1. Pasar ${Math.round(p * 200)} g de nalga por huevo batido y empanar con ${Math.round(p * 100)} g de pan rallado.`,
+          `2. Pelar ${Math.round(p * 250)} g de zapallo anco y hervir en agua con sal hasta ablandar.`,
+          `3. Pisar el zapallo caliente con ${Math.round(p * 15)} g de manteca y ${Math.round(p * 25)} ml de leche.`,
+          '4. Hornear las milanesas a 200°C en asadera aceitada por 15 minutos dándolas vuelta.',
+          '5. Servir las milanesas crocantes con el puré de zapallo bien suave.'
+        );
+        ings.push(
+          { nombre: 'nalga para milanesas', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'pan rallado', cantidad: Math.round(p * 100), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'zapallo anco', cantidad: Math.round(p * 250), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'manteca', cantidad: Math.round(p * 15), unidad: 'g', categoria: 'lacteos' },
+          { nombre: 'leche', cantidad: Math.round(p * 25), unidad: 'ml', categoria: 'lacteos' }
+        );
+      } else if (platoNorm.includes('merluza')) {
+        steps.push(
+          `1. Pelar ${Math.round(p * 200)} g de papa y hervir en cubos hasta que estén tiernas.`,
+          `2. Acomodar ${Math.round(p * 200)} g de filet de merluza en una fuente para horno o sartén con un hilo de aceite.`,
+          '3. Rociar el pescado con jugo de limón, sal y perejil picado.',
+          '4. Cocinar a fuego suave o al horno durante 12 minutos hasta que la merluza esté blanca y firme.',
+          '5. Servir el pescado con las papas calientes espolvoreadas con perejil.'
+        );
+        ings.push(
+          { nombre: 'merluza', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'papa', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'limon', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' }
+        );
+      } else if (platoNorm.includes('lenteja')) {
+        steps.push(
+          `1. Picar ${Math.max(1, Math.round(p * 0.5))} cebolla y rehogar en una cacerola con aceite.`,
+          `2. Cortar ${Math.round(p * 100)} g de calabaza y 1 zanahoria en cubos chicos y sumar a la olla.`,
+          `3. Incorporar ${Math.round(p * 100)} g de lentejas y cubrir con agua o caldo caliente.`,
+          '4. Cocinar a fuego moderado por 35 minutos hasta tiernizar las lentejas y espesar el caldo.',
+          '5. Servir caliente en platos hondos.'
+        );
+        ings.push(
+          { nombre: 'lentejas', cantidad: Math.round(p * 100), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'calabaza', cantidad: Math.round(p * 100), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'cebolla', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' }
+        );
+      } else if (platoNorm.includes('tarta')) {
+        steps.push(
+          `1. Cortar ${Math.max(3, p)} zapallito en dados y saltear con ${Math.max(1, Math.round(p * 0.5))} cebolla picada.`,
+          '2. Escurrir muy bien todo el líquido para no humedecer la masa.',
+          `3. Batir ${Math.max(2, Math.round(p * 0.75))} huevo con ${Math.round(p * 50)} g de queso cremoso en cubitos.`,
+          '4. Forrar una tartera con 1 tapa de tarta, rellenar y hornear a 180°C por 30 minutos.',
+          '5. Dejar reposar 5 minutos y servir tibia.'
+        );
+        ings.push(
+          { nombre: 'zapallito', cantidad: Math.max(3, p), unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'cebolla', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'huevo', cantidad: Math.max(2, Math.round(p * 0.75)), unidad: 'unidad', categoria: 'almacen' },
+          { nombre: 'queso cremoso', cantidad: Math.round(p * 50), unidad: 'g', categoria: 'lacteos' },
+          { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'panaderia' }
+        );
+      } else if (platoNorm.includes('fideo')) {
+        steps.push(
+          `1. Hervir ${Math.round(p * 100)} g de fideos en abundante agua con sal.`,
+          `2. Formar albóndigas chicas con ${Math.round(p * 150)} g de carne picada sazonada con sal y orégano.`,
+          `3. Dorar las albóndigas en sartén y sumar ${Math.round(p * 75)} ml de salsa de tomate.`,
+          '4. Cocinar a fuego suave 15 minutos hasta que la salsa espese.',
+          '5. Escurrir los fideos y servir con la salsa y albóndigas calientes.'
+        );
+        ings.push(
+          { nombre: 'fideos', cantidad: Math.round(p * 100), unidad: 'g', categoria: 'almacen' },
+          { nombre: 'carne picada', cantidad: Math.round(p * 150), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'salsa de tomate', cantidad: Math.round(p * 75), unidad: 'ml', categoria: 'almacen' }
+        );
+      } else {
+        // Asado
+        steps.push(
+          `1. Encender el fuego con ${Math.max(1, Math.round(p / 4))} paquete de carbón.`,
+          `2. Colocar ${Math.round(p * 350)} g de tira de asado y ${Math.round(p * 150)} g de vacío sobre la parrilla con sal gruesa.`,
+          '3. Cocinar a fuego moderado 50 minutos del lado del hueso.',
+          '4. Dar vuelta la carne y asar 25 minutos más hasta dorar parejo.',
+          '5. Servir la carne caliente con ensalada fresca de lechuga y tomate.'
+        );
+        ings.push(
+          { nombre: 'tira de asado', cantidad: Math.round(p * 350), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'vacio', cantidad: Math.round(p * 150), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'carbon', cantidad: Math.max(1, Math.round(p / 4)), unidad: 'paquete', categoria: 'almacen' }
+        );
+      }
+    } else {
+      // Cenas
+      if (platoNorm.includes('omelette')) {
+        steps.push(
+          `1. Blanquear ${Math.max(1, Math.round(p * 0.5))} atado de espinaca en agua hirviendo y escurrir bien.`,
+          `2. Batir ${Math.max(2, p * 1.5)} huevo con sal y pimienta.`,
+          `3. Calentar una sartén con un chorrito de aceite y volcar los huevos.`,
+          `4. Agregar la espinaca picada y ${Math.round(p * 40)} g de queso cremoso en el centro.`,
+          '5. Doblar por la mitad, dejar derretir el queso 1 minuto y servir con ensalada fresca.'
+        );
+        ings.push(
+          { nombre: 'huevo', cantidad: Math.max(2, Math.round(p * 1.5)), unidad: 'unidad', categoria: 'almacen' },
+          { nombre: 'espinaca', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'atado', categoria: 'verduleria' },
+          { nombre: 'queso cremoso', cantidad: Math.round(p * 40), unidad: 'g', categoria: 'lacteos' }
+        );
+      } else if (platoNorm.includes('pastel de papa')) {
+        steps.push(
+          `1. Pelar ${Math.round(p * 250)} g de papa y hervir en agua con sal hasta ablandar.`,
+          `2. Pisar las papas en caliente con ${Math.round(p * 15)} g de manteca y ${Math.round(p * 25)} ml de leche.`,
+          `3. Picar ${Math.max(1, Math.round(p * 0.5))} cebolla y dorar con ${Math.round(p * 180)} g de carne picada.`,
+          '4. Armar una fuente para horno con la base de carne picada y cubrir con el puré.',
+          '5. Gratinar a 200°C en el horno por 20 minutos hasta dorar la superficie.'
+        );
+        ings.push(
+          { nombre: 'carne picada', cantidad: Math.round(p * 180), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'papa', cantidad: Math.round(p * 250), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'cebolla', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'manteca', cantidad: Math.round(p * 15), unidad: 'g', categoria: 'lacteos' },
+          { nombre: 'leche', cantidad: Math.round(p * 25), unidad: 'ml', categoria: 'lacteos' }
+        );
+      } else if (platoNorm.includes('trucha')) {
+        steps.push(
+          `1. Pelar ${Math.round(p * 250)} g de calabaza y hervir hasta que esté blanda.`,
+          `2. Pisar la calabaza con ${Math.round(p * 15)} g de manteca para hacer el puré.`,
+          `3. Calentar una plancha con un hilo de aceite y colocar ${Math.round(p * 200)} g de trucha del lado de la piel.`,
+          '4. Cocinar 4 minutos por lado hasta que la carne esté rosada y tierna.',
+          '5. Servir la trucha dorada acompañada del puré de calabaza caliente.'
+        );
+        ings.push(
+          { nombre: 'trucha', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'calabaza', cantidad: Math.round(p * 250), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'manteca', cantidad: Math.round(p * 15), unidad: 'g', categoria: 'lacteos' }
+        );
+      } else if (platoNorm.includes('pizza')) {
+        steps.push(
+          '1. Estirar 1 bollo de masa de pizza en una pizzera aceitada.',
+          `2. Cubrir con ${Math.round(p * 50)} ml de salsa de tomate condimentada con orégano.`,
+          `3. Agregar ${Math.round(p * 75)} g de muzzarella en rodajas cubriendo toda la superficie.`,
+          '4. Hornear a 240°C durante 12 minutos hasta que la masa esté crocante y el queso fundido.',
+          '5. Cortar en porciones y servir caliente.'
+        );
+        ings.push(
+          { nombre: 'harina 000', cantidad: 300, unidad: 'g', categoria: 'almacen' },
+          { nombre: 'salsa de tomate', cantidad: Math.round(p * 50), unidad: 'ml', categoria: 'almacen' },
+          { nombre: 'muzzarella', cantidad: Math.round(p * 75), unidad: 'g', categoria: 'lacteos' }
+        );
+      } else if (platoNorm.includes('bondiola')) {
+        steps.push(
+          `1. Cortar ${Math.round(p * 200)} g de bondiola en bifes medianos y dorar en plancha o sartén.`,
+          `2. Pelar ${Math.round(p * 200)} g de batata y cortar en rodajas finas.`,
+          '3. Acomodar las batatas en asadera y hornear a 200°C por 20 minutos hasta caramelizar.',
+          '4. Servir los bifes de bondiola calientes junto con las batatas doradas.'
+        );
+        ings.push(
+          { nombre: 'bondiola', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'carniceria' },
+          { nombre: 'batata', cantidad: Math.round(p * 200), unidad: 'g', categoria: 'verduleria' }
+        );
+      } else {
+        // Sopa crema o cazuela
+        steps.push(
+          `1. Pelar ${Math.round(p * 250)} g de calabaza y cortar en cubos parejos.`,
+          `2. Picar ${Math.max(1, Math.round(p * 0.5))} cebolla y dorar en cacerola con ${Math.round(p * 10)} g de manteca.`,
+          '3. Sumar la calabaza, cubrir con caldo y cocinar 20 minutos hasta tiernizar.',
+          `4. Incorporar ${Math.round(p * 30)} ml de leche y procesar hasta lograr crema aterciopelada.`,
+          '5. Servir caliente con queso rallado.'
+        );
+        ings.push(
+          { nombre: 'calabaza', cantidad: Math.round(p * 250), unidad: 'g', categoria: 'verduleria' },
+          { nombre: 'cebolla', cantidad: Math.max(1, Math.round(p * 0.5)), unidad: 'unidad', categoria: 'verduleria' },
+          { nombre: 'manteca', cantidad: Math.round(p * 10), unidad: 'g', categoria: 'lacteos' },
+          { nombre: 'leche', cantidad: Math.round(p * 30), unidad: 'ml', categoria: 'lacteos' }
+        );
+      }
     }
 
-    if (tipo === 'almuerzo') {
-      const lunchDishes = [
-        {
-          nombre: 'Pechuga de pollo a la plancha con arroz y ensalada',
-          analisis: ['pollo: pechuga de pollo, limon', 'guarnicion: arroz, tomate, lechuga'],
-          ings: [
-            { nombre: 'pechuga de pollo', cantidad: p * 0.25, unidad: 'kg', categoria: 'carniceria' as const },
-            { nombre: 'arroz', cantidad: p * 70, unidad: 'g', categoria: 'almacen' as const },
-            { nombre: 'tomate', cantidad: p, unidad: 'unidad', categoria: 'verduleria' as const },
-            { nombre: 'lechuga', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
-          ],
-        },
-        {
-          nombre: 'Tarta casera de zapallitos y queso',
-          analisis: ['tarta: masa de tarta, zapallito, cebolla, huevo, queso cremoso'],
-          ings: [
-            { nombre: 'masa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'almacen' as const },
-            { nombre: 'zapallito', cantidad: p >= 4 ? 6 : 4, unidad: 'unidad', categoria: 'verduleria' as const },
-            { nombre: 'cebolla', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
-            { nombre: 'huevo', cantidad: 3, unidad: 'unidad', categoria: 'almacen' as const },
-            { nombre: 'queso cremoso', cantidad: 250, unidad: 'g', categoria: 'lacteos' as const },
-          ],
-        },
-        {
-          nombre: 'Fideos con salsa de tomate y albóndigas magras',
-          analisis: ['fideos: fideos secos', 'tuco: salsa de tomate, carne picada, cebolla'],
-          ings: [
-            { nombre: 'fideos', cantidad: p * 100, unidad: 'g', categoria: 'almacen' as const },
-            { nombre: 'salsa de tomate', cantidad: 1, unidad: 'paquete', categoria: 'almacen' as const },
-            { nombre: 'carne picada', cantidad: p * 120, unidad: 'g', categoria: 'carniceria' as const },
-            { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
-          ],
-        },
-      ];
-
-      const choice = lunchDishes[dayIndex % lunchDishes.length];
-      return {
-        tipo: 'almuerzo',
-        nombre: choice.nombre,
-        porciones: p,
-        tiempo_minutos: 35,
-        por_que_encaja: 'Almuerzo balanceado con proteínas y energía equilibrada.',
-        analisis_plato: choice.analisis,
-        ingredientes: choice.ings.map((it) => ({
-          nombre: it.nombre,
-          cantidad: it.cantidad,
-          unidad: it.unidad as any,
-          categoria: it.categoria,
-          es_basico: false,
-          opcional: false,
-          item_despensa_coincidente: null,
-        })),
-      };
+    // Si tiene bebida (desayuno o merienda), sumar sus ingredientes
+    if (meal.bebida && (meal.tipo === 'desayuno' || meal.tipo === 'merienda')) {
+      const bebNorm = normalizeString(meal.bebida);
+      if (bebNorm.includes('cafe con leche') || bebNorm.includes('cafe cortado')) {
+        if (!ings.some((i) => i.nombre === 'leche')) {
+          ings.push({ nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos' });
+        }
+        ings.push({ nombre: 'cafe', cantidad: 50, unidad: 'g', categoria: 'almacen', es_basico: true });
+      } else if (bebNorm.includes('mate cocido')) {
+        if (!ings.some((i) => i.nombre === 'leche')) {
+          ings.push({ nombre: 'leche', cantidad: 500, unidad: 'ml', categoria: 'lacteos' });
+        }
+        ings.push({ nombre: 'mate cocido', cantidad: 1, unidad: 'paquete', categoria: 'almacen', es_basico: true });
+      } else if (bebNorm.includes('licuado')) {
+        if (!ings.some((i) => i.nombre === 'banana')) {
+          ings.push({ nombre: 'banana', cantidad: p, unidad: 'unidad', categoria: 'verduleria' });
+        }
+        if (!ings.some((i) => i.nombre === 'leche')) {
+          ings.push({ nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos' });
+        }
+      } else if (bebNorm.includes('naranja')) {
+        ings.push({ nombre: 'naranja', cantidad: p * 2, unidad: 'unidad', categoria: 'verduleria' });
+      } else if (bebNorm.includes('te')) {
+        ings.push({ nombre: 'te', cantidad: 1, unidad: 'paquete', categoria: 'almacen', es_basico: true });
+      } else if (bebNorm.includes('mate tradicional') || bebNorm.includes('yerba')) {
+        ings.push({ nombre: 'yerba mate', cantidad: 1, unidad: 'paquete', categoria: 'almacen', es_basico: true });
+      } else if (bebNorm.includes('chocolatada') || bebNorm.includes('submarino')) {
+        if (!ings.some((i) => i.nombre === 'leche')) {
+          ings.push({ nombre: 'leche', cantidad: 1, unidad: 'l', categoria: 'lacteos' });
+        }
+        ings.push({ nombre: 'chocolate', cantidad: 100, unidad: 'g', categoria: 'almacen' });
+      } else if (bebNorm.includes('yogur')) {
+        if (!ings.some((i) => i.nombre.includes('yogur'))) {
+          ings.push({ nombre: 'yogur bebible', cantidad: p, unidad: 'unidad', categoria: 'lacteos' });
+        }
+      }
     }
 
-    // Cena
-    const dinnerDishes = [
-      {
-        nombre: 'Milanesas al horno con puré de zapallo',
-        analisis: ['milanesa: nalga, pan rallado, huevo', 'pure de zapallo: zapallo anco, manteca, leche'],
-        ings: [
-          { nombre: 'nalga', cantidad: p * 0.25, unidad: 'kg', categoria: 'carniceria' as const },
-          { nombre: 'pan rallado', cantidad: 250, unidad: 'g', categoria: 'almacen' as const },
-          { nombre: 'huevo', cantidad: 2, unidad: 'unidad', categoria: 'almacen' as const },
-          { nombre: 'zapallo anco', cantidad: 1, unidad: 'kg', categoria: 'verduleria' as const },
-          { nombre: 'leche', cantidad: 150, unidad: 'ml', categoria: 'lacteos' as const },
-          { nombre: 'manteca', cantidad: 50, unidad: 'g', categoria: 'lacteos' as const },
-        ],
-      },
-      {
-        nombre: 'Tortilla de verduras con ensalada de tomate y zanahoria',
-        analisis: ['tortilla: acelga, zanahoria, cebolla, huevo', 'ensalada: tomate, zanahoria rallada'],
-        ings: [
-          { nombre: 'acelga', cantidad: 1, unidad: 'atado', categoria: 'verduleria' as const },
-          { nombre: 'zanahoria', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
-          { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
-          { nombre: 'huevo', cantidad: 4, unidad: 'unidad', categoria: 'almacen' as const },
-          { nombre: 'tomate', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
-        ],
-      },
-      {
-        nombre: 'Guiso liviano de lentejas y verduras',
-        analisis: ['guiso: lentejas, zanahoria, cebolla, morron, calabaza'],
-        ings: [
-          { nombre: 'lentejas', cantidad: 400, unidad: 'g', categoria: 'almacen' as const },
-          { nombre: 'calabaza', cantidad: 500, unidad: 'g', categoria: 'verduleria' as const },
-          { nombre: 'cebolla', cantidad: 2, unidad: 'unidad', categoria: 'verduleria' as const },
-          { nombre: 'morron', cantidad: 1, unidad: 'unidad', categoria: 'verduleria' as const },
-        ],
-      },
-    ];
-
-    const choice = dinnerDishes[dayIndex % dinnerDishes.length];
-    return {
-      tipo: 'cena',
-      nombre: choice.nombre,
-      porciones: p,
-      tiempo_minutos: 40,
-      por_que_encaja: 'Cena digestiva, reconfortante y rendidora para la familia.',
-      analisis_plato: choice.analisis,
-      ingredientes: choice.ings.map((it) => ({
+    // Sanitización silenciosa y chequeo contra pasos
+    const chefIngs: ChefIngredient[] = ings.map((it) => {
+      const matchingPantry = pantry.find((pt) => normalizeString(pt.name).includes(normalizeString(it.nombre)));
+      return {
         nombre: it.nombre,
         cantidad: it.cantidad,
-        unidad: it.unidad as any,
+        unidad: it.unidad,
         categoria: it.categoria,
-        es_basico: false,
+        es_basico: it.es_basico || false,
         opcional: false,
-        item_despensa_coincidente: null,
-      })),
-    };
-  };
+        item_despensa_coincidente: matchingPantry ? matchingPantry.name : null,
+      };
+    });
 
-  const days: MenuDay[] = params.daysConfig.map((dayCfg, idx) => {
-    const comidas = dayCfg.comidas.map((tipo) => getMealForType(tipo, dayCfg.dia, idx));
+    const filtered = filterAbsurdIngredients(meal.plato, chefIngs);
+    const validated = validateIngredientsAgainstSteps(steps, filtered);
+
     return {
-      dia: dayCfg.dia,
-      comidas,
+      tipo: meal.tipo,
+      nombre: meal.plato,
+      porciones: p,
+      tiempo_minutos: 35,
+      por_que_encaja: meal.por_que_encaja,
+      bebida: meal.bebida || null,
+      pasos: steps,
+      analisis_plato: [],
+      ingredientes: validated,
     };
+  });
+
+  return {
+    dia,
+    comidas: builtMeals,
+  };
+}
+
+/**
+ * Generador Mock completo de Menú Semanal (utilizado tanto en offline como de respaldo)
+ */
+export function generateMockMenuResponse(params: {
+  daysConfig: Array<{ dia: string; comidas: MealType[] }>;
+  targetProfile: string;
+  profileDetail?: string;
+  persons?: number;
+  mandatoryDishes?: string;
+  pantry?: PantryItem[];
+}): ChefMenuResponse {
+  const p = params.persons || 4;
+  const plan = generateMockPlanificarSemana(params);
+
+  // Ejecución del validador de variedad en servidor/local
+  validateWeeklyPlanVariety(plan.comidas, params.mandatoryDishes ? [params.mandatoryDishes] : []);
+
+  // Construcción día por día con sus pasos e ingredientes
+  const activeDays = params.daysConfig.filter((d) => d.comidas.length > 0);
+  const days: MenuDay[] = activeDays.map((dayCfg) => {
+    const dayMeals = plan.comidas.filter(
+      (m) => normalizeString(m.dia) === normalizeString(dayCfg.dia)
+    );
+    return generateMockDayMealDetail(dayCfg.dia, dayMeals, p, params.pantry || []);
+  });
+
+  // Filtro de advertencias para evitar duplicar el cartel fijo de salud
+  const filteredWarnings = (plan.advertencias || []).filter((adv) => {
+    const norm = normalizeString(adv);
+    return !norm.includes('sugerencias generales');
   });
 
   return {
@@ -1345,6 +1837,6 @@ export function generateMockMenuResponse(params: {
     mensaje: null,
     aclaracion: null,
     dias: days,
-    advertencias: warnings,
+    advertencias: filteredWarnings,
   };
 }

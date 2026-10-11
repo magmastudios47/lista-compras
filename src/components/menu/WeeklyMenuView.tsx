@@ -221,16 +221,27 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
       {/* Si ya hay menú generado: VISTA PREVIA */}
       {generatedMenu && unifiedComparisons ? (
         <div className="space-y-4 animate-slide-up">
-          {/* Advertencias médicas si hubiere */}
-          {generatedMenu.advertencias && generatedMenu.advertencias.length > 0 && (
-            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-800 dark:text-rose-200 space-y-1">
-              {generatedMenu.advertencias.map((adv, i) => (
-                <p key={i} className="text-[11px] leading-relaxed">
-                  ⚠️ {adv}
-                </p>
-              ))}
-            </div>
-          )}
+          {/* Advertencias médicas reales de la IA (eliminando duplicación con el aviso fijo) */}
+          {(() => {
+            const genuineWarnings = (generatedMenu.advertencias || []).filter((adv) => {
+              const norm = adv.toLowerCase();
+              return (
+                !norm.includes('nutricionista') &&
+                !norm.includes('sugerencias generales') &&
+                !norm.includes('profesional de la salud')
+              );
+            });
+            if (genuineWarnings.length === 0) return null;
+            return (
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+                {genuineWarnings.map((adv, i) => (
+                  <p key={i} className="text-[11px] leading-relaxed">
+                    ⚠️ {adv}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Días y comidas planificadas */}
           <div className="space-y-2.5">
@@ -258,9 +269,16 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                         className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs flex items-start justify-between gap-2"
                       >
                         <div className="min-w-0 flex-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                            {comida.tipo}
-                          </span>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {comida.tipo}
+                            </span>
+                            {comida.bebida && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                                ☕ {comida.bebida}
+                              </span>
+                            )}
+                          </div>
 
                           {isEditing ? (
                             <div className="flex items-center gap-1.5 mt-1">
@@ -289,6 +307,20 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                               {comida.por_que_encaja}
                             </p>
+                          )}
+
+                          {/* Pasos resumidos si están disponibles */}
+                          {comida.pasos && comida.pasos.length > 0 && !isEditing && (
+                            <details className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              <summary className="cursor-pointer text-[10px] font-semibold text-patagonia-600 dark:text-patagonia-400 select-none">
+                                Ver pasos ({comida.pasos.length})
+                              </summary>
+                              <ol className="mt-1 pl-4 list-decimal space-y-0.5 text-[10px]">
+                                {comida.pasos.map((p, pIdx) => (
+                                  <li key={pIdx}>{p}</li>
+                                ))}
+                              </ol>
+                            </details>
                           )}
                         </div>
 

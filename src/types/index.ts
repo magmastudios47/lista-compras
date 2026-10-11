@@ -208,6 +208,7 @@ export interface MenuItemMeal {
   tiempo_minutos?: number;
   por_que_encaja?: string;
   bebida?: string | null;
+  pasos?: string[];
   analisis_plato?: string[];
   ingredientes: ChefIngredient[];
 }
@@ -240,6 +241,21 @@ export interface ChefPlanificarSemanaResponse {
   mensaje: string | null;
   aclaracion: string | null;
   comidas: PlanificarSemanaMeal[];
+  advertencias: string[];
+}
+
+export interface DayMealDetail {
+  tipo: MealType;
+  plato: string;
+  bebida?: string | null;
+  pasos: string[];
+  ingredientes: ChefIngredient[];
+}
+
+export interface ChefDetalleDiaMenuResponse {
+  modo: 'detalle_dia_menu';
+  dia: string;
+  comidas: DayMealDetail[];
   advertencias: string[];
 }
 
