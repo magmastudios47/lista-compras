@@ -107,6 +107,9 @@ export const AddItemDrawer: React.FC<AddItemDrawerProps> = ({
       setUserOverrodeCategory(false);
       setAutoSuggestedCat(null);
       onClose();
+    } catch (err) {
+      console.error('[AddItemDrawer] Error al agregar ítem:', err);
+      onClose();
     } finally {
       setIsSubmitting(false);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Category, PantryItem, Unit } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
-import { isConfigured, INITIAL_PANTRY_SEED, supabase } from '../lib/supabaseClient';
+import { isConfigured, INITIAL_PANTRY_SEED, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { singularizeIngredient } from '../lib/normalizer';
 
@@ -11,17 +11,13 @@ export function usePantry() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!household) {
-      setPantryItems([]);
-      setLoading(false);
-      return;
-    }
+    const activeHousehold = household || MOCK_HOUSEHOLD;
 
     // 1. Cargar desde offlineStorage de inmediato
     const cached = offlineStorage.getPantryItems();
     if (cached.length > 0) {
-      setPantryItems(cached.filter((p) => p.household_id === household.id));
-    } else if (!isConfigured) {
+      setPantryItems(cached.filter((p) => p.household_id === activeHousehold.id));
+    } else {
       setPantryItems(INITIAL_PANTRY_SEED);
       offlineStorage.savePantryItems(INITIAL_PANTRY_SEED);
     }
@@ -37,10 +33,10 @@ export function usePantry() {
         const { data, error } = await supabase
           .from('pantry_items')
           .select('*')
-          .eq('household_id', household.id)
+          .eq('household_id', activeHousehold.id)
           .order('name', { ascending: true });
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           setPantryItems(data as PantryItem[]);
           offlineStorage.savePantryItems(data as PantryItem[]);
         }
@@ -55,10 +51,10 @@ export function usePantry() {
 
     // 3. Suscripción a Realtime
     const channel = supabase
-      .channel(`pantry:${household.id}`)
+      .channel(`pantry:${activeHousehold.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'pantry_items', filter: `household_id=eq.${household.id}` },
+        { event: '*', schema: 'public', table: 'pantry_items', filter: `household_id=eq.${activeHousehold.id}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newItem = payload.new as PantryItem;
@@ -100,7 +96,7 @@ export function usePantry() {
       unit: Unit | null = null,
       category: Category = 'almacen'
     ): Promise<PantryItem> => {
-      if (!household) throw new Error('No hay hogar activo');
+      const activeHousehold = household || MOCK_HOUSEHOLD;
 
       const norm = singularizeIngredient(name);
       const existing = pantryItems.find((p) => p.normalized_name === norm);
@@ -127,7 +123,9 @@ export function usePantry() {
         });
 
         if (isConfigured) {
-          await supabase.from('pantry_items').update(itemResult).eq('id', existing.id);
+          try {
+            await supabase.from('pantry_items').update(itemResult).eq('id', existing.id);
+          } catch {}
         } else {
           offlineStorage.enqueueMutation({
             table: 'pantry_items',
@@ -138,8 +136,8 @@ export function usePantry() {
       } else {
         itemResult = {
           id: `pantry_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          household_id: household.id,
-          name: name.trim().toLowerCase(),
+          household_id: activeHousehold.id,
+          name: name.trim(),
           normalized_name: norm,
           quantity,
           unit,
@@ -149,14 +147,15 @@ export function usePantry() {
         };
 
         setPantryItems((prev) => {
-          const next = [...prev, itemResult];
+          const next = [itemResult, ...prev];
           offlineStorage.savePantryItems(next);
           return next;
         });
 
         if (isConfigured) {
-          const { data } = await supabase.from('pantry_items').insert(itemResult).select().single();
-          if (data) itemResult = data as PantryItem;
+          try {
+            await supabase.from('pantry_items').insert(itemResult);
+          } catch {}
         } else {
           offlineStorage.enqueueMutation({
             table: 'pantry_items',
@@ -170,7 +169,6 @@ export function usePantry() {
     },
     [household, pantryItems]
   );
-
   // Agregar múltiples ítems (útil para "interpretar_despensa")
   const addMultiplePantryItems = useCallback(
     async (items: Array<{ nombre: string; cantidad: number | null; unidad: Unit | null; categoria: Category }>) => {

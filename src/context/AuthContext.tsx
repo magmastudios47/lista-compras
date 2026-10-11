@@ -52,15 +52,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Modo producción con Supabase Auth
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser({
           id: session.user.id,
           email: session.user.email || '',
           displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
         });
+        setLoading(false);
+      } else {
+        // Intentar iniciar sesión anónima en Supabase para obtener auth.uid()
+        let authed = false;
+        try {
+          const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
+          if (!anonErr && anonData?.user) {
+            setUser({
+              id: anonData.user.id,
+              email: '',
+              displayName: 'Miembro del Hogar',
+            });
+            authed = true;
+          }
+        } catch {}
+
+        if (!authed) {
+          // Si anonymous auth está desactivado en Supabase, usar perfil local persistente
+          const savedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+          if (savedUser) {
+            try {
+              setUser(JSON.parse(savedUser));
+            } catch {
+              const defaultUser: UserProfile = {
+                id: MOCK_USER.id,
+                email: MOCK_USER.email,
+                displayName: MOCK_USER.user_metadata.full_name,
+              };
+              setUser(defaultUser);
+              localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(defaultUser));
+            }
+          } else {
+            const defaultUser: UserProfile = {
+              id: MOCK_USER.id,
+              email: MOCK_USER.email,
+              displayName: MOCK_USER.user_metadata.full_name,
+            };
+            setUser(defaultUser);
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(defaultUser));
+          }
+        }
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -70,8 +111,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: session.user.email || '',
           displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
         });
-      } else {
-        setUser(null);
       }
       setLoading(false);
     });

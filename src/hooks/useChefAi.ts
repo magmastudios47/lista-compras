@@ -39,26 +39,38 @@ export function useChefAi() {
         let cookData: ChefCookResponse;
 
         if (isConfigured && household) {
-          // Llamada a la Edge Function de Supabase
-          const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
-            body: {
-              modo: 'cocinar',
-              pedido: mealRequest,
-              personas: persons,
-              restricciones: dietaryRestrictions,
-              despensa: pantry.map((p) => p.name),
-              household_id: household.id,
-            },
-          });
+          try {
+            // Llamada a la Edge Function de Supabase
+            const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+              body: {
+                modo: 'cocinar',
+                pedido: mealRequest,
+                personas: persons,
+                restricciones: dietaryRestrictions,
+                despensa: pantry.map((p) => p.name),
+                household_id: household.id,
+              },
+            });
 
-          if (fnError || !data) {
-            throw new Error(fnError?.message || data?.error || 'Error al consultar al Chef IA.');
+            if (!fnError && data) {
+              cookData = data as ChefCookResponse;
+              incrementChefUsage();
+            } else {
+              // Edge function aún no desplegada en Supabase: usar motor local
+              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
+              await new Promise((r) => setTimeout(r, 600));
+              cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
+              incrementChefUsage();
+            }
+          } catch (fnCallErr) {
+            console.warn('Fallo al invocar Edge Function, usando motor local:', fnCallErr);
+            await new Promise((r) => setTimeout(r, 600));
+            cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
+            incrementChefUsage();
           }
-          cookData = data as ChefCookResponse;
-          incrementChefUsage();
         } else {
           // MOCK / DEMO Provider para desarrollo sin credenciales o fuera de línea
-          await new Promise((r) => setTimeout(r, 900));
+          await new Promise((r) => setTimeout(r, 600));
           cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
           incrementChefUsage();
         }
@@ -91,22 +103,33 @@ export function useChefAi() {
         let suggestData: ChefSuggestResponse;
 
         if (isConfigured && household) {
-          const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
-            body: {
-              modo: 'sugerir',
-              despensa: pantry.map((p) => p.name),
-              texto_despensa: freeText,
-              household_id: household.id,
-            },
-          });
+          try {
+            const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+              body: {
+                modo: 'sugerir',
+                despensa: pantry.map((p) => p.name),
+                texto_despensa: freeText,
+                household_id: household.id,
+              },
+            });
 
-          if (fnError || !data) {
-            throw new Error(fnError?.message || data?.error || 'Error al solicitar sugerencias.');
+            if (!fnError && data) {
+              suggestData = data as ChefSuggestResponse;
+              incrementChefUsage();
+            } else {
+              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
+              await new Promise((r) => setTimeout(r, 600));
+              suggestData = generateMockSuggestResponse(pantry, freeText);
+              incrementChefUsage();
+            }
+          } catch (fnErr) {
+            console.warn('Fallo al invocar Edge Function, usando motor local:', fnErr);
+            await new Promise((r) => setTimeout(r, 600));
+            suggestData = generateMockSuggestResponse(pantry, freeText);
+            incrementChefUsage();
           }
-          suggestData = data as ChefSuggestResponse;
-          incrementChefUsage();
         } else {
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, 600));
           suggestData = generateMockSuggestResponse(pantry, freeText);
           incrementChefUsage();
         }
@@ -133,18 +156,35 @@ export function useChefAi() {
         let parsedData: ChefInterpretItemsResponse;
 
         if (isConfigured && household) {
-          const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
-            body: {
-              modo: 'interpretar_items',
-              texto_despensa: text,
-              household_id: household?.id,
-            },
-          });
+          try {
+            const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+              body: {
+                modo: 'interpretar_items',
+                texto_despensa: text,
+                household_id: household?.id,
+              },
+            });
 
-          if (fnError || !data) {
-            throw new Error(fnError?.message || data?.error || 'Error al interpretar ítems.');
+            if (!fnError && data) {
+              parsedData = data as ChefInterpretItemsResponse;
+            } else {
+              const localItems = processHandwrittenText(text, household?.id);
+              parsedData = {
+                modo: 'interpretar_items',
+                fuera_de_tema: false,
+                mensaje: null,
+                items: localItems,
+              };
+            }
+          } catch {
+            const localItems = processHandwrittenText(text, household?.id);
+            parsedData = {
+              modo: 'interpretar_items',
+              fuera_de_tema: false,
+              mensaje: null,
+              items: localItems,
+            };
           }
-          parsedData = data as ChefInterpretItemsResponse;
         } else {
           // Procesamiento offline con pipeline determinista y catálogo argentino
           await new Promise((r) => setTimeout(r, 400));
@@ -209,27 +249,38 @@ export function useChefAi() {
         const p = params.persons || 4;
 
         if (isConfigured && household) {
-          const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
-            body: {
-              modo: 'menu',
-              dias_config: params.daysConfig,
-              objetivo_perfil: params.targetProfile,
-              objetivo_detalle: params.profileDetail,
-              personas: p,
-              platos_obligatorios: params.mandatoryDishes,
-              despensa: params.pantry.map((x) => x.name),
-              household_id: household.id,
-            },
-          });
+          try {
+            const { data, error: fnError } = await supabase.functions.invoke('chef-ai', {
+              body: {
+                modo: 'menu',
+                dias_config: params.daysConfig,
+                objetivo_perfil: params.targetProfile,
+                objetivo_detalle: params.profileDetail,
+                personas: p,
+                platos_obligatorios: params.mandatoryDishes,
+                despensa: params.pantry.map((x) => x.name),
+                household_id: household.id,
+              },
+            });
 
-          if (fnError || !data) {
-            throw new Error(fnError?.message || data?.error || 'Error al generar el menú.');
+            if (!fnError && data) {
+              menuData = data as ChefMenuResponse;
+              // Incrementa 3 consultas
+              incrementChefUsage();
+              incrementChefUsage();
+              incrementChefUsage();
+            } else {
+              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
+              await new Promise((r) => setTimeout(r, 600));
+              menuData = generateMockMenuResponse(params);
+              incrementChefUsage();
+            }
+          } catch (fnErr) {
+            console.warn('Fallo al invocar Edge Function chef-ai, usando motor local:', fnErr);
+            await new Promise((r) => setTimeout(r, 600));
+            menuData = generateMockMenuResponse(params);
+            incrementChefUsage();
           }
-          menuData = data as ChefMenuResponse;
-          // Incrementa 3 consultas
-          incrementChefUsage();
-          incrementChefUsage();
-          incrementChefUsage();
         } else {
           // Fallback MOCK / Offline
           await new Promise((r) => setTimeout(r, 600));

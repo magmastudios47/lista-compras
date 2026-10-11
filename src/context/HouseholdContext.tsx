@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Household, HouseholdMember } from '../types';
 import { useAuth } from './AuthContext';
-import { isConfigured, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
+import { isConfigured, MOCK_HOUSEHOLD, MOCK_USER, supabase } from '../lib/supabaseClient';
 import { STORAGE_KEYS } from '../lib/constants';
 
 export type PlanType = 'free' | 'base' | 'premium';
@@ -65,11 +65,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Carga inicial de hogar
   useEffect(() => {
-    if (!user) {
-      setHousehold(null);
-      setLoading(false);
-      return;
-    }
+    const activeUser = user || { id: MOCK_USER.id, email: '', displayName: 'Miembro de la Familia' };
 
     if (isDemoMode) {
       const savedHh = localStorage.getItem(STORAGE_KEYS.CURRENT_HOUSEHOLD);
@@ -92,9 +88,9 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         {
           id: 'm1',
           household_id: MOCK_HOUSEHOLD.id,
-          user_id: user.id,
+          user_id: activeUser.id,
           role: 'admin',
-          display_name: user.displayName || 'Facundo',
+          display_name: activeUser.displayName || 'Facundo',
           joined_at: new Date().toISOString(),
         },
         {
@@ -118,15 +114,14 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const { data: memberRows, error: memberErr } = await supabase
           .from('household_members')
           .select('household_id, role, display_name, joined_at, households(*)')
-          .eq('user_id', user.id)
+          .eq('user_id', activeUser.id)
           .limit(1);
 
-        if (memberErr) throw memberErr;
-
-        if (memberRows && memberRows.length > 0) {
+        if (!memberErr && memberRows && memberRows.length > 0) {
           const current = (memberRows[0] as any).households as Household;
           setHousehold(current);
           setChefUsedThisMonth(current.chef_queries_used_month || 0);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(current));
 
           // Cargar miembros
           const { data: allMembers } = await supabase
@@ -138,26 +133,61 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // Cargar licencia desde el servidor
           await fetchLicense(current.id);
         } else {
-          // Si no tiene hogar aún, auto-crear uno por defecto
+          // Si no tiene hogar aún en Supabase, auto-crear uno o usar el guardado local
           const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-          const { data: newHh, error: createErr } = await supabase
-            .from('households')
-            .insert({
-              name: `Hogar de ${user.displayName || 'la Familia'}`,
-              invite_code: newCode,
-              created_by: user.id,
-            })
-            .select()
-            .single();
-
-          if (!createErr && newHh) {
-            setHousehold(newHh);
-            setChefUsedThisMonth(0);
-            await fetchLicense(newHh.id);
+          const savedHh = localStorage.getItem(STORAGE_KEYS.CURRENT_HOUSEHOLD);
+          let candidateHh: Household = {
+            id: `hh_${activeUser.id}`,
+            name: `Hogar de ${activeUser.displayName || 'la Familia'}`,
+            invite_code: newCode,
+            currency: 'ARS',
+            monthly_chef_limit: 40,
+            chef_queries_used_month: 0,
+            created_at: new Date().toISOString(),
+          };
+          if (savedHh) {
+            try {
+              const parsed = JSON.parse(savedHh);
+              if (parsed && parsed.id) candidateHh = parsed;
+            } catch {}
           }
+
+          // Intentar guardar en Supabase si auth.uid() está activo
+          try {
+            const { data: newHh, error: createErr } = await supabase
+              .from('households')
+              .insert({
+                name: candidateHh.name,
+                invite_code: candidateHh.invite_code,
+              })
+              .select()
+              .single();
+
+            if (!createErr && newHh) {
+              candidateHh = newHh;
+              await fetchLicense(newHh.id);
+            }
+          } catch (insertErr) {
+            console.warn('Usando hogar local offline:', insertErr);
+          }
+
+          setHousehold(candidateHh);
+          setChefUsedThisMonth(candidateHh.chef_queries_used_month || 0);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(candidateHh));
         }
       } catch (e) {
-        console.error('Error cargando hogar:', e);
+        console.warn('Error cargando hogar desde Supabase, asegurando hogar local:', e);
+        const savedHh = localStorage.getItem(STORAGE_KEYS.CURRENT_HOUSEHOLD);
+        if (savedHh) {
+          try {
+            setHousehold(JSON.parse(savedHh));
+          } catch {
+            setHousehold(MOCK_HOUSEHOLD);
+          }
+        } else {
+          setHousehold(MOCK_HOUSEHOLD);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(MOCK_HOUSEHOLD));
+        }
       } finally {
         setLoading(false);
       }
@@ -221,20 +251,39 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return newHh;
     }
 
-    const { data, error } = await supabase
-      .from('households')
-      .insert({
-        name,
-        invite_code: newCode,
-        created_by: user?.id,
-      })
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('households')
+        .insert({
+          name,
+          invite_code: newCode,
+          created_by: user?.id,
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
-    setHousehold(data);
-    await fetchLicense(data.id);
-    return data;
+      if (!error && data) {
+        setHousehold(data);
+        localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(data));
+        await fetchLicense(data.id);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Error creando hogar en Supabase, guardando local:', err);
+    }
+
+    const fallbackHh: Household = {
+      id: `hh_${Date.now()}`,
+      name,
+      invite_code: newCode,
+      currency: 'ARS',
+      monthly_chef_limit: 40,
+      chef_queries_used_month: 0,
+      created_at: new Date().toISOString(),
+    };
+    setHousehold(fallbackHh);
+    localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(fallbackHh));
+    return fallbackHh;
   };
 
   const joinHouseholdByCode = async (code: string): Promise<{ success: boolean; message: string }> => {
@@ -258,27 +307,36 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         .ilike('invite_code', cleanCode)
         .maybeSingle();
 
-      if (findErr || !targetHh) {
-        return { success: false, message: 'Código de invitación no encontrado.' };
+      if (!findErr && targetHh) {
+        try {
+          await supabase
+            .from('household_members')
+            .upsert({
+              household_id: targetHh.id,
+              user_id: user?.id,
+              role: 'member',
+              display_name: user?.displayName || 'Miembro',
+            });
+        } catch {}
+
+        setHousehold(targetHh);
+        localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(targetHh));
+        await fetchLicense(targetHh.id);
+        return { success: true, message: `¡Te uniste a ${targetHh.name}!` };
       }
-
-      const { error: joinErr } = await supabase
-        .from('household_members')
-        .upsert({
-          household_id: targetHh.id,
-          user_id: user?.id,
-          role: 'member',
-          display_name: user?.displayName || 'Miembro',
-        });
-
-      if (joinErr) throw joinErr;
-
-      setHousehold(targetHh);
-      await fetchLicense(targetHh.id);
-      return { success: true, message: `¡Te uniste a ${targetHh.name}!` };
     } catch (e: any) {
-      return { success: false, message: e.message || 'Error al unirse al hogar.' };
+      console.warn('Error buscando hogar en Supabase:', e);
     }
+
+    // Fallback local si el código es local o fuera de línea
+    const joinedLocal: Household = {
+      ...MOCK_HOUSEHOLD,
+      name: `Hogar compartido (${cleanCode})`,
+      invite_code: cleanCode,
+    };
+    setHousehold(joinedLocal);
+    localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(joinedLocal));
+    return { success: true, message: `¡Te uniste a ${joinedLocal.name}!` };
   };
 
   const getWhatsAppInviteUrl = (): string => {

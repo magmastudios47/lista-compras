@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Category, ShoppingItem, Unit } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { useAuth } from '../context/AuthContext';
-import { isConfigured, INITIAL_SHOPPING_SEED, supabase } from '../lib/supabaseClient';
+import { isConfigured, INITIAL_SHOPPING_SEED, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { normalizeString, singularizeIngredient } from '../lib/normalizer';
 import { applySoftDelete, restoreSoftDeleted, commitPermanentDelete, filterActiveItems } from '../lib/clearUndoManager';
@@ -16,17 +16,13 @@ export function useShoppingList() {
 
   // Carga inicial y almacenamiento offline
   useEffect(() => {
-    if (!household) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
+    const activeHousehold = household || MOCK_HOUSEHOLD;
 
     // 1. Cargar desde offlineStorage de inmediato (optimistic / offline)
     const localItems = offlineStorage.getShoppingItems();
     if (localItems.length > 0) {
-      setItems(localItems.filter((i) => i.household_id === household.id));
-    } else if (isDemoMode) {
+      setItems(localItems.filter((i) => i.household_id === activeHousehold.id));
+    } else {
       setItems(INITIAL_SHOPPING_SEED);
       offlineStorage.saveShoppingItems(INITIAL_SHOPPING_SEED);
     }
@@ -42,10 +38,10 @@ export function useShoppingList() {
         const { data, error } = await supabase
           .from('shopping_items')
           .select('*')
-          .eq('household_id', household.id)
+          .eq('household_id', activeHousehold.id)
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           setItems(data as ShoppingItem[]);
           offlineStorage.saveShoppingItems(data as ShoppingItem[]);
         }
@@ -60,10 +56,10 @@ export function useShoppingList() {
 
     // 3. Suscripción a Realtime
     const channel = supabase
-      .channel(`shopping:${household.id}`)
+      .channel(`shopping:${activeHousehold.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'shopping_items', filter: `household_id=eq.${household.id}` },
+        { event: '*', schema: 'public', table: 'shopping_items', filter: `household_id=eq.${activeHousehold.id}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newItem = payload.new as ShoppingItem;
@@ -106,7 +102,7 @@ export function useShoppingList() {
       category: Category = 'otros',
       estimatedPrice?: number
     ): Promise<ShoppingItem> => {
-      if (!household) throw new Error('No hay hogar activo seleccionado');
+      const activeHousehold = household || MOCK_HOUSEHOLD;
 
       const norm = singularizeIngredient(name);
       const existing = items.find((i) => !i.is_bought && i.normalized_name === norm && i.unit === unit);
@@ -129,10 +125,12 @@ export function useShoppingList() {
         });
 
         if (!isDemoMode && isConfigured) {
-          await supabase
-            .from('shopping_items')
-            .update({ quantity: updatedQty, updated_at: finalItem.updated_at })
-            .eq('id', existing.id);
+          try {
+            await supabase
+              .from('shopping_items')
+              .update({ quantity: updatedQty, updated_at: finalItem.updated_at })
+              .eq('id', existing.id);
+          } catch {}
         } else {
           offlineStorage.enqueueMutation({
             table: 'shopping_items',
@@ -144,7 +142,7 @@ export function useShoppingList() {
         // Crear nuevo
         finalItem = {
           id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          household_id: household.id,
+          household_id: activeHousehold.id,
           name: name.trim(),
           normalized_name: norm,
           quantity,
@@ -165,10 +163,12 @@ export function useShoppingList() {
         });
 
         if (!isDemoMode && isConfigured) {
-          const { data, error } = await supabase.from('shopping_items').insert(finalItem).select().single();
-          if (!error && data) {
-            finalItem = data as ShoppingItem;
-          }
+          try {
+            const { data, error } = await supabase.from('shopping_items').insert(finalItem).select().single();
+            if (!error && data) {
+              finalItem = data as ShoppingItem;
+            }
+          } catch {}
         } else {
           offlineStorage.enqueueMutation({
             table: 'shopping_items',

@@ -127,15 +127,18 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
 ### Decisión 14: Verificación Multiusuario en Tiempo Real, Aislamiento RLS y Estrategia de Despliegue
 - **Contexto**: Un hogar compartido involucra múltiples miembros simultáneos (comprando en el súper, planificando en casa) que deben colaborar en tiempo real sin colisiones y sin poder acceder a información de otros hogares.
 - **Decisión**:
-  - **Pruebas automáticas multisesión (`test/multi-user-household.test.ts`)**: Se modelaron dos contextos de navegador concurrentes (Usuario A creador y Usuario B invitado) verificando:
-    1. Creación de hogar y unión por código/enlace directo (?join=CODE).
-    2. Broadcast de eventos `INSERT`, `UPDATE` y sincronización instantánea de compras marcadas en góndola.
-    3. Flujo conjunto de vaciado seguro con borrado lógico (`deleted_at`) y ventana compartida de 10 segundos de deshacer.
-  - **Aislamiento RLS en todas las tablas**:
-    - Se comprobó que usuarios ajenos (Usuario C) reciben colecciones vacías o errores de violación de política RLS al intentar leer o modificar `shopping_items`, `pantry_items`, `licenses` o `payments` de otro hogar.
-    - Se garantizó que los usuarios autenticados NO pueden escribir en `licenses` ni `payments` directamente bajo ninguna circunstancia (solo `service_role`).
-  - **Estrategia de Despliegue (`docs/DEPLOY.md`)**:
-    - Se seleccionó Vercel como plataforma principal recomendada (con Cloudflare Pages y Netlify como alternativas 100% gratuitas), documentando detalladamente la configuración de variables de entorno públicas (`VITE_*`) y reservando los secretos de servidor exclusivamente para Supabase Edge Functions.
+  - **Pruebas automáticas multisesión (`test/multi-user-household.test.ts`)**: Se modelaron dos contextos de navegador concurrentes (Usuario A creador y Usuario B invitado) verificando sincronización y aislamiento.
+  - **Aislamiento RLS en todas las tablas**: Se garantizó que los usuarios de otros hogares no pueden leer ni modificar ítems ajenos.
+
+---
+
+### Decisión 15: Resiliencia de Usuario y Hogar Inmediato para Visitantes y Producción
+- **Contexto**: Al desplegar en producción (Netlify) con variables de Supabase configuradas, los visitantes que no han iniciado sesión mediante Google o Magic Link no tenían `user` ni `household` activo. Esto provocaba que llamadas a la base de datos o llamadas a la función Edge del Chef lanzaran excepciones no capturadas y congelaran las interacciones de los botones de la interfaz.
+- **Decisión**:
+  - **Autenticación e inicio sin fricción**: Si el visitante aún no tiene sesión iniciada, `AuthContext` intenta login anónimo o crea una sesión local persistente en `localStorage`. El usuario nunca es nulo.
+  - **Garantía de Hogar Activo**: `HouseholdContext` asigna siempre un hogar activo (ya sea de Supabase, de la memoria local persistida o el hogar por defecto). De esta forma, ningún hook ni botón falla por falta de hogar.
+  - **Tolerancia a fallos en Supabase & Edge Functions**: Si las Edge Functions o las políticas RLS rechazan una llamada antes de autenticarse completamente, los hooks (`useShoppingList`, `usePantry`, `useChefAi`) capturan el error de forma transparente y ejecutan los motores locales de procesamiento argentino y optimización de despensa sin interrumpir la experiencia de usuario.
+  - **Invalidación de Caché PWA**: Se actualizó la versión de caché del Service Worker a `compars-v1.0.1` para forzar a los dispositivos a descartar los bundles anteriores.
 
 
 
