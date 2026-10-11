@@ -93,3 +93,43 @@
   - [x] Creación de `docs/QA-REPORT.md`
   - [x] Creación de `docs/RONDA2-3.md`
   - [x] Actualización de SKILL.md, SETUP.md y task.md
+
+---
+
+# Ronda 4
+
+- [ ] **Bloque 1: Chef que crea la receta libremente (RECETA PRIMERO, INGREDIENTES DESPUÉS)**
+  - [ ] Eliminación de inyección de recetarios de referencia (generación libre por IA)
+  - [ ] Lista corta de validación silenciosa en servidor (~30 platos) para ingredientes absurdos
+  - [ ] Nuevo orden JSON en modos `cocinar` y `sugerir`: `receta` primero (5-10 pasos con cantidades), luego `ingredientes` extraídos (reemplazo de `analisis_plato`)
+  - [ ] Esquema Zod y prompt del sistema actualizados con sección RECETA PRIMERO
+  - [ ] Validación de servidor: ingredientes no mencionados en pasos marcados como `opcional: true`
+  - [ ] Variables de modelo `GEMINI_MODEL_CHEF` y `GEMINI_MODEL_FAST` según lista oficial vigente, temperatura 0.3-0.4 y reasoning/thinking
+  - [ ] Vista previa del chef con receta colapsable antes de ingredientes
+  - [ ] Suite de pruebas de regresión culinaria (debe incluir / no debe incluir), platos no catalogados y reporte en `docs/chef-quality-report.md`
+- [ ] **Bloque 2: Menú Semanal (Variedad, Bebidas y Aviso Único)**
+  - [ ] Flujo en 2 pasos: Paso A (`planificar_semana` sin ingredientes) + Paso B (detalle de ingredientes por día)
+  - [ ] Validador de variedad en servidor (platos únicos por comida en la semana, rotación de proteína máx 2 días seguidos, >=4 bases desayuno/merienda)
+  - [ ] Bebida incluida y variada en desayunos y meriendas (ingredientes sumados a la lista excepto básicos de despensa)
+  - [ ] Adaptación de plan a perfil/objetivo con `por_que_encaja` específico
+  - [ ] Aviso único: eliminar duplicación de cartel amarillo y rojo
+  - [ ] Actualización de prompt del sistema (`planificar_semana`) y pruebas de menú completo (7 días x 4 comidas) con medición de llamadas a IA
+- [ ] **Bloque 3: Despensa Automática al Marcar Comprado**
+  - [ ] Configuración de hogar "Al marcar como comprado": Preguntar / Sumar automáticamente / No sumar (sincronizada en hogar)
+  - [ ] Modo automático: suma inmediata por normalizador, toast con Deshacer y reversión si se desmarca
+  - [ ] Exclusión configurable de productos de limpieza
+  - [ ] Operación idempotente y soporte offline sin duplicar
+  - [ ] Pruebas unitarias y de integración de los tres modos, reversión y concurrencia
+- [ ] **Bloque 4: Precios Automáticos (SEPA / Precios Claros)**
+  - [ ] Verificación de fuentes oficiales abiertas SEPA / Precios Claros y documentación de cobertura en Junín de los Andes / Neuquén
+  - [ ] Script importador batch local / tarea periódica con cálculo de mediana descartando valores atípicos
+  - [ ] Tabla `price_reference` en Supabase con RLS (lectura miembros, escritura servicio)
+  - [ ] Precedencia de precios en la app: Hogar > SEPA > Sin precio
+  - [ ] Total con "aprox.", conteo de ítems sin precio, fecha de actualización y atribución oficial obligatoria
+  - [ ] Pruebas con archivo de muestra de SEPA
+- [ ] **Bloque 5: Revisión Final (QA) y Cierre**
+  - [ ] Recorrido manual y automatizado en viewport de celular (390x844) y escritorio
+  - [ ] Chequeo exhaustivo de consola y red
+  - [ ] Documentos `docs/QA-REPORT-R4.md` y `docs/RONDA4.md`
+  - [ ] Actualización final de `SKILL.md`, `SETUP.md` y `task.md`
+
