@@ -98,15 +98,15 @@
 
 # Ronda 4
 
-- [ ] **Bloque 1: Chef que crea la receta libremente (RECETA PRIMERO, INGREDIENTES DESPUÉS)**
-  - [ ] Eliminación de inyección de recetarios de referencia (generación libre por IA)
-  - [ ] Lista corta de validación silenciosa en servidor (~30 platos) para ingredientes absurdos
-  - [ ] Nuevo orden JSON en modos `cocinar` y `sugerir`: `receta` primero (5-10 pasos con cantidades), luego `ingredientes` extraídos (reemplazo de `analisis_plato`)
-  - [ ] Esquema Zod y prompt del sistema actualizados con sección RECETA PRIMERO
-  - [ ] Validación de servidor: ingredientes no mencionados en pasos marcados como `opcional: true`
-  - [ ] Variables de modelo `GEMINI_MODEL_CHEF` y `GEMINI_MODEL_FAST` según lista oficial vigente, temperatura 0.3-0.4 y reasoning/thinking
-  - [ ] Vista previa del chef con receta colapsable antes de ingredientes
-  - [ ] Suite de pruebas de regresión culinaria (debe incluir / no debe incluir), platos no catalogados y reporte en `docs/chef-quality-report.md`
+- [x] **Bloque 1: Chef que crea la receta libremente (RECETA PRIMERO, INGREDIENTES DESPUÉS)**
+  - [x] Eliminación de inyección de recetarios de referencia (generación libre por IA)
+  - [x] Lista corta de validación silenciosa en servidor (~30 platos) para ingredientes absurdos
+  - [x] Nuevo orden JSON en modos `cocinar` y `sugerir`: `receta` primero (5-10 pasos con cantidades), luego `ingredientes` extraídos (reemplazo de `analisis_plato`)
+  - [x] Esquema Zod y prompt del sistema actualizados con sección RECETA PRIMERO
+  - [x] Validación de servidor: ingredientes no mencionados en pasos marcados como `opcional: true`
+  - [x] Variables de modelo `GEMINI_MODEL_CHEF` y `GEMINI_MODEL_FAST` según lista oficial vigente, temperatura 0.3-0.4 y reasoning/thinking
+  - [x] Vista previa del chef con receta colapsable antes de ingredientes
+  - [x] Suite de pruebas de regresión culinaria (debe incluir / no debe incluir), platos no catalogados y reporte en `docs/chef-quality-report.md`
 - [ ] **Bloque 2: Menú Semanal (Variedad, Bebidas y Aviso Único)**
   - [ ] Flujo en 2 pasos: Paso A (`planificar_semana` sin ingredientes) + Paso B (detalle de ingredientes por día)
   - [ ] Validador de variedad en servidor (platos únicos por comida en la semana, rotación de proteína máx 2 días seguidos, >=4 bases desayuno/merienda)

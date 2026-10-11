@@ -8,7 +8,12 @@ import {
   InterpretPantryResponseSchema,
   InterpretItemsResponseSchema,
   MenuResponseSchema,
+  PlanificarSemanaResponseSchema,
 } from '../_shared/schemas.ts';
+import {
+  filterAbsurdIngredients,
+  validateIngredientsAgainstSteps,
+} from '../_shared/culinarySanity.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,7 +71,7 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id, dias_config, objetivo_perfil, objetivo_detalle, platos_obligatorios, platos_ya_elegidos } = body;
 
-    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu'];
+    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'planificar_semana'];
     if (!modo || !allowedModes.includes(modo)) {
       return new Response(
         JSON.stringify({ error: 'Modo inválido.' }),
@@ -77,11 +82,11 @@ serve(async (req: Request) => {
     // 2. Control de Acceso por Plan y Cuota Mensual
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
-    const isMenuMode = modo === 'menu';
+    const isMenuMode = modo === 'menu' || modo === 'planificar_semana';
     const queryCost = isMenuMode ? 3 : 1;
 
     if (household_id) {
-      // Si es modo menu, verificar plan Premium
+      // Si es modo menu / planificar_semana, verificar plan Premium
       if (isMenuMode) {
         const { data: license } = await supabaseClient
           .from('licenses')
@@ -147,7 +152,10 @@ serve(async (req: Request) => {
     }
 
     // 3. Caché de consultas idénticas (para ahorrar tokens y dar respuesta instantánea)
-    const normalizedKey = `${modo}_${(pedido || texto_despensa || JSON.stringify(dias_config || '')).trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}_${objetivo_perfil || ''}`;
+    // Para planificar_semana, los modos de planificación NO usan caché fija simple (incluyen timestamp/semilla)
+    const normalizedKey = modo === 'planificar_semana'
+      ? `${modo}_${(pedido || '').trim().toLowerCase()}_${Date.now()}`
+      : `${modo}_${(pedido || texto_despensa || JSON.stringify(dias_config || '')).trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}_${objetivo_perfil || ''}`;
     const cacheKey = await crypto.subtle
       .digest('SHA-256', new TextEncoder().encode(normalizedKey))
       .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join(''));
@@ -182,6 +190,7 @@ serve(async (req: Request) => {
     if (modo === 'interpretar_items') validator = InterpretItemsResponseSchema.parse;
     if (modo === 'interpretar_despensa') validator = InterpretPantryResponseSchema.parse;
     if (modo === 'menu') validator = MenuResponseSchema.parse;
+    if (modo === 'planificar_semana') validator = PlanificarSemanaResponseSchema.parse;
 
     const geminiResult = await gemini.generateChefResponse(
       {
@@ -202,10 +211,24 @@ serve(async (req: Request) => {
       validator
     );
 
+    let outputData: any = geminiResult.data;
+
+    // Validación silenciosa del servidor: eliminar absurdos y marcar opcionales si no están en pasos
+    if (modo === 'cocinar' && outputData.receta) {
+      outputData.ingredientes = filterAbsurdIngredients(pedido || outputData.receta.nombre, outputData.ingredientes || []);
+      outputData.ingredientes = validateIngredientsAgainstSteps(outputData.receta.pasos, outputData.ingredientes);
+    } else if (modo === 'sugerir' && Array.isArray(outputData.recetas)) {
+      outputData.recetas = outputData.recetas.map((r: any) => {
+        const filtered = filterAbsurdIngredients(r.nombre, r.ingredientes || []);
+        const validated = validateIngredientsAgainstSteps(r.pasos || r.receta?.pasos, filtered);
+        return { ...r, ingredientes: validated };
+      });
+    }
+
     // 5. Guardar en ai_cache
     await supabaseClient.from('ai_cache').insert({
       cache_key: cacheKey,
-      response_json: geminiResult.data,
+      response_json: outputData,
     });
 
     // 6. Registrar en ai_usage_log e incrementar cuota mensual si no es modo interpretación

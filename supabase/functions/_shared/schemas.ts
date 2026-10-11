@@ -50,12 +50,12 @@ export const CookResponseSchema = z.object({
       porciones: z.number(),
       tiempo_minutos: z.number().optional(),
       dificultad: z.enum(['facil', 'media', 'dificil']),
-      pasos: z.array(z.string()).min(1).max(10),
+      pasos: z.array(z.string()).min(1).max(15),
     })
     .nullable()
     .optional(),
-  analisis_plato: z.array(z.string()).default([]),
   ingredientes: z.array(ChefIngredientSchema).default([]),
+  analisis_plato: z.array(z.string()).optional().default([]),
   advertencias: z.array(z.string()).default([]),
 });
 
@@ -65,8 +65,18 @@ export const SuggestRecipeSchema = z.object({
   tiempo_minutos: z.number().optional(),
   dificultad: z.enum(['facil', 'media', 'dificil']),
   por_que_conviene: z.string(),
-  analisis_plato: z.array(z.string()).default([]),
+  pasos: z.array(z.string()).optional(),
+  receta: z
+    .object({
+      nombre: z.string().optional(),
+      porciones: z.number().optional(),
+      tiempo_minutos: z.number().optional(),
+      dificultad: z.enum(['facil', 'media', 'dificil']).optional(),
+      pasos: z.array(z.string()),
+    })
+    .optional(),
   ingredientes: z.array(ChefIngredientSchema),
+  analisis_plato: z.array(z.string()).optional().default([]),
 });
 
 export const SuggestResponseSchema = z.object({
@@ -135,6 +145,23 @@ export const MenuResponseSchema = z.object({
   advertencias: z.array(z.string()).default([]),
 });
 
+export const PlanificarSemanaMealSchema = z.object({
+  dia: z.string(),
+  tipo: MealTypeEnum,
+  plato: z.string(),
+  bebida: z.string().nullable().optional(),
+  por_que_encaja: z.string(),
+});
+
+export const PlanificarSemanaResponseSchema = z.object({
+  modo: z.literal('planificar_semana'),
+  fuera_de_tema: z.boolean().default(false),
+  mensaje: z.string().nullable().default(null),
+  aclaracion: z.string().nullable().default(null),
+  comidas: z.array(PlanificarSemanaMealSchema).default([]),
+  advertencias: z.array(z.string()).default([]),
+});
+
 export type CookResponse = z.infer<typeof CookResponseSchema>;
 export type SuggestResponse = z.infer<typeof SuggestResponseSchema>;
 export type InterpretPantryResponse = z.infer<typeof InterpretPantryResponseSchema>;
@@ -142,4 +169,6 @@ export type InterpretItemsResponse = z.infer<typeof InterpretItemsResponseSchema
 export type MenuResponse = z.infer<typeof MenuResponseSchema>;
 export type MenuItemMeal = z.infer<typeof MenuItemMealSchema>;
 export type MenuDay = z.infer<typeof MenuDaySchema>;
+export type PlanificarSemanaResponse = z.infer<typeof PlanificarSemanaResponseSchema>;
+export type PlanificarSemanaMeal = z.infer<typeof PlanificarSemanaMealSchema>;
 

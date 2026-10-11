@@ -66,6 +66,8 @@ export interface Household {
   monthly_chef_limit: number;
   chef_queries_used_month: number;
   chef_quota_reset_at?: string;
+  pantry_add_mode?: 'ask' | 'auto' | 'never';
+  pantry_exclude_cleaning?: boolean;
   created_by?: string | null;
   created_at: string;
   updated_at?: string;
@@ -126,6 +128,14 @@ export interface ChefSuggestRecipe {
   tiempo_minutos?: number;
   dificultad: 'facil' | 'media' | 'dificil';
   por_que_conviene: string;
+  pasos?: string[];
+  receta?: {
+    nombre?: string;
+    porciones?: number;
+    tiempo_minutos?: number;
+    dificultad?: 'facil' | 'media' | 'dificil';
+    pasos: string[];
+  };
   analisis_plato?: string[];
   ingredientes: ChefIngredient[];
 }
@@ -197,6 +207,7 @@ export interface MenuItemMeal {
   porciones: number;
   tiempo_minutos?: number;
   por_que_encaja?: string;
+  bebida?: string | null;
   analisis_plato?: string[];
   ingredientes: ChefIngredient[];
 }
@@ -214,4 +225,22 @@ export interface ChefMenuResponse {
   dias: MenuDay[];
   advertencias: string[];
 }
+
+export interface PlanificarSemanaMeal {
+  dia: string;
+  tipo: MealType;
+  plato: string;
+  bebida?: string | null;
+  por_que_encaja: string;
+}
+
+export interface ChefPlanificarSemanaResponse {
+  modo: 'planificar_semana';
+  fuera_de_tema: boolean;
+  mensaje: string | null;
+  aclaracion: string | null;
+  comidas: PlanificarSemanaMeal[];
+  advertencias: string[];
+}
+
 

@@ -15,6 +15,8 @@ import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
 import { calculatePantryDiscounts, mergeDuplicateIngredients } from '../lib/discountEngine';
 import { processHandwrittenText } from '../lib/textPipeline';
+import { filterAbsurdIngredients, validateIngredientsAgainstSteps } from '../lib/culinarySanityCheck';
+import { normalizeString } from '../lib/normalizer';
 
 export function useChefAi() {
   const { household, remainingQueries, incrementChefUsage } = useHousehold();
@@ -75,6 +77,18 @@ export function useChefAi() {
           incrementChefUsage();
         }
 
+        // Sanitización silenciosa de servidor y validación contra pasos de receta
+        if (cookData.receta) {
+          cookData.ingredientes = filterAbsurdIngredients(
+            mealRequest || cookData.receta.nombre,
+            cookData.ingredientes
+          );
+          cookData.ingredientes = validateIngredientsAgainstSteps(
+            cookData.receta.pasos,
+            cookData.ingredientes
+          );
+        }
+
         // Ejecutar motor determinista de descuento de despensa en cliente
         const comparisons = calculatePantryDiscounts(cookData.ingredientes, pantry);
 
@@ -132,6 +146,14 @@ export function useChefAi() {
           await new Promise((r) => setTimeout(r, 600));
           suggestData = generateMockSuggestResponse(pantry, freeText);
           incrementChefUsage();
+        }
+
+        if (suggestData && Array.isArray(suggestData.recetas)) {
+          suggestData.recetas = suggestData.recetas.map((r) => {
+            const filtered = filterAbsurdIngredients(r.nombre, r.ingredientes);
+            const validated = validateIngredientsAgainstSteps(r.pasos || r.receta?.pasos, filtered);
+            return { ...r, ingredientes: validated };
+          });
         }
 
         return suggestData;
@@ -327,7 +349,7 @@ export function generateMockCookResponse(
   restrictions: string[],
   pantry: PantryItem[]
 ): ChefCookResponse {
-  const reqLower = mealRequest.toLowerCase();
+  const reqLower = normalizeString(mealRequest);
 
   // Caso fuera de tema
   if (reqLower.includes('politica') || reqLower.includes('dolar') || reqLower.includes('computadora')) {
@@ -343,7 +365,77 @@ export function generateMockCookResponse(
     };
   }
 
-  // 1. Milanesa con puré de zapallo (FIDELIDAD AL PLATO: Zapallo, NUNCA papa)
+  // 1. Pastel de papas con pollo
+  if (reqLower.includes('pastel de papa') && reqLower.includes('pollo')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Pastel de papas con pollo casero',
+        porciones: persons,
+        tiempo_minutos: 55,
+        dificultad: 'facil',
+        pasos: [
+          `1. Lavar, pelar y cortar ${Math.round(persons * 250)} g de papa en cubos parejos.`,
+          `2. Hervir las papas en abundante agua con sal durante 20 minutos hasta que estén bien tiernas.`,
+          `3. Pisar las papas en caliente agregando ${Math.round(persons * 12.5)} g de manteca y ${Math.round(persons * 25)} ml de leche hasta lograr un puré cremoso y condimentar con sal y nuez moscada.`,
+          `4. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y rehogar en una sartén grande con un chorrito de aceite hasta transparentar.`,
+          `5. Cortar ${Math.round(persons * 200)} g de pollo en cubitos chicos o tiras, sumar a la sartén y cocinar 10 minutos dorando bien.`,
+          `6. Hervir ${Math.max(2, Math.round(persons * 0.75))} huevo hasta dejarlos duros, picar y mezclar con el pollo y la cebolla.`,
+          `7. Aceitar una fuente para horno, volcar todo el relleno de pollo en la base y cubrir de forma pareja con el puré de papas.`,
+          `8. Llevar a horno fuerte a 200°C por 20 minutos hasta que el puré esté gratinado y servir bien caliente.`,
+        ],
+      },
+      ingredientes: [
+        { nombre: 'pollo', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'manteca', cantidad: Math.round(persons * 12.5), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 25), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 2. Pastel de papas tradicional (carne picada, NUNCA arroz ni fideos)
+  if (reqLower.includes('pastel de papa') || reqLower.includes('pastel de papas')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Pastel de papas tradicional argentino',
+        porciones: persons,
+        tiempo_minutos: 60,
+        dificultad: 'facil',
+        pasos: [
+          `1. Pelar ${Math.round(persons * 250)} g de papa y hervir en agua con sal hasta que estén tiernas.`,
+          `2. Pisar las papas en caliente junto con ${Math.round(persons * 12.5)} g de manteca y ${Math.round(persons * 25)} ml de leche tibia hasta que quede un puré sedoso.`,
+          `3. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla en cubitos y dorar en una sartén grande.`,
+          `4. Agregar ${Math.round(persons * 200)} g de carne picada y cocinar a fuego fuerte rompiendo con cuchara de madera.`,
+          `5. Hervir ${Math.max(2, Math.round(persons * 0.75))} huevo durante 10 minutos, pelar, picar e incorporar al relleno de carne picada fuera del fuego.`,
+          `6. Colocar el relleno de carne en una fuente profunda para horno y alisar la superficie.`,
+          `7. Tapar con el puré de papas marcando líneas con tenedor para dorar mejor.`,
+          `8. Gratinar a 200°C en el horno durante 25 minutos hasta que la superficie esté dorada y crocante.`,
+        ],
+      },
+      ingredientes: [
+        { nombre: 'carne picada', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'manteca', cantidad: Math.round(persons * 12.5), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 25), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 3. Milanesa con puré de zapallo (FIDELIDAD AL PLATO: Zapallo, NUNCA papa)
   if (reqLower.includes('milanesa') && (reqLower.includes('zapallo') || reqLower.includes('calabaza'))) {
     return {
       modo: 'cocinar',
@@ -356,29 +448,293 @@ export function generateMockCookResponse(
         tiempo_minutos: 45,
         dificultad: 'facil',
         pasos: [
-          'Pasar la nalga por huevo batido con sal, perejil y ajo.',
-          'Empanar con pan rallado.',
-          'Hervir o asar el zapallo anco, pisar con manteca y leche.',
-          'Freír o dorar las milanesas al horno y servir con el puré de zapallo.',
+          '1. Picar 2 dientes de ajo y 1 atado de perejil bien chiquito.',
+          `2. Batir ${Math.max(2, Math.round(persons * 0.75))} huevo en un bol junto con el ajo, perejil, sal y pimienta.`,
+          `3. Pasar ${Math.round(persons * 200)} g de nalga para milanesas por los huevos batidos impregnando bien la carne.`,
+          `4. Empanar los bifes en ${Math.round(persons * 100)} g de pan rallado presionando con la palma para que quede parejo.`,
+          `5. Pelar y cortar ${Math.round(persons * 250)} g de zapallo anco en cubos y hervir hasta que esté bien tierno.`,
+          `6. Pisar el zapallo caliente con ${Math.round(persons * 15)} g de manteca y ${Math.round(persons * 30)} ml de leche tibia.`,
+          '7. Freír las milanesas en sartén con aceite caliente hasta dorar de ambos lados.',
+          '8. Servir las milanesas crocantes con el puré de zapallo suave y caliente.',
         ],
       },
-      analisis_plato: [
-        'milanesa de nalga: nalga, huevo, pan rallado, ajo, perejil',
-        'puré de zapallo: zapallo anco, manteca, leche, sal, nuez moscada',
-      ],
       ingredientes: [
         { nombre: 'nalga para milanesas', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'pan rallado', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'zapallo anco', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'manteca', cantidad: Math.round(persons * 15), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'leche', cantidad: Math.round(persons * 50), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 30), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
     };
   }
 
-  // 2. Milanesas tradicionales (con puré de papas)
+  // 4. Milanesa napolitana (jamón, muzzarella, salsa; NUNCA arroz)
+  if (reqLower.includes('milanesa') && (reqLower.includes('napolitana') || reqLower.includes('napolitano'))) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Milanesas a la napolitana clásicas',
+        porciones: persons,
+        tiempo_minutos: 45,
+        dificultad: 'facil',
+        pasos: [
+          `1. Batir ${Math.max(2, Math.round(persons * 0.75))} huevo con sal, pimienta y perejil picado.`,
+          `2. Pasar ${Math.round(persons * 200)} g de nalga para milanesas por el huevo y rebozar con ${Math.round(persons * 100)} g de pan rallado.`,
+          '3. Freír las milanesas en sartén con aceite hasta que apenas tomen color dorado y escurrir.',
+          '4. Colocar las milanesas en una asadera amplia para horno.',
+          `5. Cubrir cada milanesa con ${Math.round(persons * 50)} ml de salsa de tomate condimentada con orégano.`,
+          `6. Colocar encima ${Math.round(persons * 40)} g de jamon cocido en fetas.`,
+          `7. Terminar con ${Math.round(persons * 60)} g de muzzarella en rodajas gruesas.`,
+          '8. Llevar a horno fuerte a 220°C por 10 minutos hasta derretir y dorar la muzzarella.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'nalga para milanesas', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'pan rallado', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'jamon cocido', cantidad: Math.round(persons * 40), unidad: 'g', categoria: 'fiambreria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'muzzarella', cantidad: Math.round(persons * 60), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'salsa de tomate', cantidad: Math.round(persons * 50), unidad: 'ml', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 5. Tarta de jamón y queso (NUNCA carne)
+  if (reqLower.includes('tarta') && reqLower.includes('jamon') && reqLower.includes('queso')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Tarta casera de jamón y queso',
+        porciones: persons,
+        tiempo_minutos: 40,
+        dificultad: 'facil',
+        pasos: [
+          '1. Aceitar una tartera de 26 cm y forrar con 1 paquete de tapa de tarta.',
+          `2. Cortar ${Math.round(persons * 60)} g de jamon cocido en cubitos o tiritas.`,
+          `3. Cortar ${Math.round(persons * 60)} g de queso cremoso en dados medianos.`,
+          `4. Batir ${Math.max(2, Math.round(persons * 0.75))} huevo en un bol con pimienta y una pizca de orégano.`,
+          '5. Mezclar el jamon picado y el queso con los huevos batidos.',
+          '6. Volcar todo el relleno sobre la masa en la tartera distribuyendo bien.',
+          '7. Hornear a 180°C durante 30 a 35 minutos hasta que la masa esté dorada y el queso gratinado.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'jamon cocido', cantidad: Math.round(persons * 60), unidad: 'g', categoria: 'fiambreria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'queso cremoso', cantidad: Math.round(persons * 60), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 6. Ñoquis de papa (NUNCA arroz)
+  if (reqLower.includes('noqui') || reqLower.includes('ñoqui')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Ñoquis de papa caseros de la abuela',
+        porciones: persons,
+        tiempo_minutos: 50,
+        dificultad: 'media',
+        pasos: [
+          `1. Lavar ${Math.round(persons * 250)} g de papa y hervir con cáscara hasta que estén bien tiernas.`,
+          '2. Pelar las papas en caliente y pisar con pisapapas sobre la mesada limpia.',
+          `3. Dejar entibiar el puré, hacer una corona y agregar ${Math.max(1, Math.round(persons * 0.25))} huevo y sal.`,
+          `4. Incorporar ${Math.round(persons * 75)} g de harina 0000 uniendo con las manos sin amasar de más.`,
+          '5. Tomar porciones de masa, estirar cilindros finos y cortar los ñoquis de 2 cm con cuchillo.',
+          '6. Pasar cada ñoqui por la ñoquera o el lomo de un tenedor enharinado.',
+          '7. Hervir en abundante agua con sal y retirar con espumadera apenas suban a flote.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'harina 0000', cantidad: Math.round(persons * 75), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(1, Math.round(persons * 0.25)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 7. Tarta de zapallitos (NUNCA zapallo anco)
+  if (reqLower.includes('zapallito')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Tarta de zapallitos jugosa',
+        porciones: persons,
+        tiempo_minutos: 40,
+        dificultad: 'facil',
+        pasos: [
+          `1. Lavar ${Math.max(3, Math.round(persons * 1))} zapallito y cortar en cubitos parejos.`,
+          `2. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y rehogar en sartén con aceite.`,
+          '3. Sumar los zapallitos y saltear a fuego vivo 10 minutos hasta evaporar el líquido.',
+          '4. Escurrir muy bien la verdura con colador fino para no humedecer la masa.',
+          `5. Batir ${Math.max(2, Math.round(persons * 0.75))} huevo con sal y sumar ${Math.round(persons * 50)} g de queso cremoso en dados.`,
+          '6. Forrar una tartera con 1 paquete de tapa de tarta y rellenar con la mezcla.',
+          '7. Hornear a 180°C durante 30 minutos hasta dorar la masa.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'zapallito', cantidad: Math.max(3, Math.round(persons * 1)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: 'cebollas' },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: 'huevos de campo' },
+        { nombre: 'queso cremoso', cantidad: Math.round(persons * 50), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 8. Pollo al horno con batata (NUNCA papa)
+  if (reqLower.includes('pollo') && reqLower.includes('batata')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Pollo al horno con batatas doradas',
+        porciones: persons,
+        tiempo_minutos: 60,
+        dificultad: 'facil',
+        pasos: [
+          `1. Limpiar y acomodar ${Math.round(persons * 250)} g de pollo en presas en una asadera grande.`,
+          '2. Condimentar el pollo con pimentón, orégano, sal y ajo picado.',
+          `3. Pelar ${Math.round(persons * 250)} g de batata y cortar en cuñas medianas.`,
+          `4. Acomodar las batatas alrededor del pollo en la asadera y rociar con ${Math.round(persons * 10)} ml de aceite de girasol.`,
+          '5. Hornear a 200°C por 30 minutos.',
+          '6. Dar vuelta las batatas para que caramelicen parejas.',
+          '7. Hornear 20 minutos más hasta que el pollo esté dorado y las batatas tiernas.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'pollo', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'batata', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'aceite de girasol', cantidad: Math.round(persons * 10), unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 9. Bondiola braseada con puré de calabaza (plato no catalogado)
+  if (reqLower.includes('bondiola') && (reqLower.includes('calabaza') || reqLower.includes('zapallo'))) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Bondiola braseada con puré de calabaza',
+        porciones: persons,
+        tiempo_minutos: 90,
+        dificultad: 'media',
+        pasos: [
+          `1. Sellar ${Math.round(persons * 200)} g de bondiola en una cacerola con aceite caliente hasta dorar bien.`,
+          `2. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y agregar a la olla junto con la carne.`,
+          '3. Cubrir con caldo o agua, tapar y brasear a fuego suave durante 1 hora y media hasta tiernizar.',
+          `4. Pelar ${Math.round(persons * 250)} g de zapallo anco y hervir en agua con sal hasta que esté blando.`,
+          `5. Pisar el zapallo caliente con ${Math.round(persons * 15)} g de manteca y ${Math.round(persons * 25)} ml de leche tibia.`,
+          '6. Desmenuzar la bondiola con su salsa reducida y servir junto con el puré de calabaza.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'bondiola', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'zapallo anco', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'manteca', cantidad: Math.round(persons * 15), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 25), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 10. Tarta de choclo (plato no catalogado)
+  if (reqLower.includes('tarta') && reqLower.includes('choclo')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Tarta de choclo cremosa',
+        porciones: persons,
+        tiempo_minutos: 45,
+        dificultad: 'facil',
+        pasos: [
+          `1. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y rehogar en una sartén con ${Math.round(persons * 10)} g de manteca.`,
+          `2. Incorporar ${Math.round(persons * 100)} g de choclo en granos a la sartén.`,
+          `3. Espolvorear ${Math.round(persons * 10)} g de harina 000 y cocinar 1 minuto.`,
+          `4. Verter ${Math.round(persons * 50)} ml de leche revolviendo hasta formar una crema espesa.`,
+          `5. Dejar entibiar y sumar ${Math.max(2, Math.round(persons * 0.75))} huevo batido y ${Math.round(persons * 50)} g de queso cremoso en cubitos.`,
+          '6. Forrar una tartera con 1 paquete de tapa de tarta y volcar el relleno cremoso.',
+          '7. Hornear a 180°C durante 30 minutos hasta que la masa esté bien dorada.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'choclo', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'manteca', cantidad: Math.round(persons * 10), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'harina 000', cantidad: Math.round(persons * 10), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 50), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'queso cremoso', cantidad: Math.round(persons * 50), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 11. Guiso de mondongo (plato no catalogado)
+  if (reqLower.includes('guiso') && reqLower.includes('mondongo')) {
+    return {
+      modo: 'cocinar',
+      fuera_de_tema: false,
+      mensaje: null,
+      aclaracion: null,
+      receta: {
+        nombre: 'Guiso criollo de mondongo',
+        porciones: persons,
+        tiempo_minutos: 90,
+        dificultad: 'media',
+        pasos: [
+          `1. Hervir ${Math.round(persons * 200)} g de mondongo limpio en agua con sal por 45 minutos y cortar en tiras finas.`,
+          `2. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y 1 morron en cubos chicos.`,
+          `3. Cortar ${Math.max(1, Math.round(persons * 0.25))} chorizo colorado en rodajitas y dorar en una cacerola grande.`,
+          '4. Agregar la cebolla y el morrón a la cacerola y saltear hasta que estén tiernos.',
+          `5. Incorporar ${Math.round(persons * 100)} g de porotos remojados y ${Math.round(persons * 100)} g de tomate perita picado.`,
+          '6. Sumar el mondongo en tiras, cubrir con caldo y cocinar a fuego suave 40 minutos hasta espesar.',
+          '7. Servir bien caliente en cazuelas hondas.',
+        ],
+      },
+      ingredientes: [
+        { nombre: 'mondongo', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'morron', cantidad: 1, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'chorizo colorado', cantidad: Math.max(1, Math.round(persons * 0.25)), unidad: 'unidad', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'porotos', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tomate perita', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+      advertencias: [],
+    };
+  }
+
+  // 12. Milanesas tradicionales (con puré de papas)
   if (reqLower.includes('milanesa')) {
     const isPantryEgg = pantry.some((p) => p.name.includes('huevo'));
     return {
@@ -392,16 +748,15 @@ export function generateMockCookResponse(
         tiempo_minutos: 45,
         dificultad: 'facil',
         pasos: [
-          'Pasar la nalga por huevo batido con sal, pimienta y perejil.',
-          'Empanar con pan rallado presionando bien.',
-          'Hervir las papas con cáscara, pelar y pisar con manteca y leche tibia.',
-          'Freír las milanesas en abundante aceite caliente hasta dorar de ambos lados.',
+          `1. Batir ${Math.max(2, Math.round(persons * 0.75))} huevo con sal, pimienta y perejil picado.`,
+          `2. Pasar ${Math.round(persons * 200)} g de nalga para milanesas por el huevo batido.`,
+          `3. Empanar con ${Math.round(persons * 100)} g de pan rallado presionando con la palma.`,
+          `4. Pelar y hervir ${Math.round(persons * 250)} g de papa en agua con sal hasta tiernizar.`,
+          `5. Pisar las papas calientes con ${Math.round(persons * 15)} g de manteca y ${Math.round(persons * 50)} ml de leche tibia.`,
+          '6. Freír las milanesas en abundante aceite caliente hasta dorar de ambos lados.',
+          '7. Servir las milanesas crocantes con el puré caliente.',
         ],
       },
-      analisis_plato: [
-        'milanesa de nalga: nalga, huevo, pan rallado, ajo, perejil',
-        'puré de papa: papa, manteca, leche, sal',
-      ],
       ingredientes: [
         { nombre: 'nalga para milanesas', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: isPantryEgg ? 'huevos de campo' : null },
@@ -409,13 +764,12 @@ export function generateMockCookResponse(
         { nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'leche', cantidad: Math.round(persons * 50), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'manteca', cantidad: Math.round(persons * 15), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'aceite de girasol', cantidad: 500, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: 'aceite de girasol' },
       ],
       advertencias: [],
     };
   }
 
-  // 3. Ensalada de papa
+  // 13. Ensalada de papa y huevo
   if (reqLower.includes('ensalada') && reqLower.includes('papa')) {
     return {
       modo: 'cocinar',
@@ -427,50 +781,26 @@ export function generateMockCookResponse(
         porciones: persons,
         tiempo_minutos: 25,
         dificultad: 'facil',
-        pasos: ['Hervir las papas peladas en cubos.', 'Hervir los huevos duros.', 'Unir con mayonesa y perejil.'],
+        pasos: [
+          `1. Lavar, pelar y cortar ${Math.round(persons * 250)} g de papa en cubos parejos.`,
+          '2. Hervir las papas en agua con sal hasta que estén tiernas y escurrir.',
+          `3. Hervir ${Math.max(2, persons)} huevo durante 10 minutos para dejarlos duros.`,
+          '4. Pelar los huevos en agua fría y cortar en trozos medianos.',
+          '5. Picar 1 atado de perejil fresco bien chiquito.',
+          '6. Unir las papas, huevos y perejil en un bol grande.',
+          '7. Condimentar con sal y aceite de girasol y servir fresca.',
+        ],
       },
-      analisis_plato: ['ensalada de papa: papa, huevo, perejil, mayonesa o aceite'],
       ingredientes: [
         { nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'huevo', cantidad: persons, unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'perejil', cantidad: 1, unidad: 'atado', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
     };
   }
 
-  // 4. Tarta de zapallitos (FIDELIDAD AL PLATO: Zapallito, NO zapallo anco)
-  if (reqLower.includes('zapallito')) {
-    return {
-      modo: 'cocinar',
-      fuera_de_tema: false,
-      mensaje: null,
-      aclaracion: null,
-      receta: {
-        nombre: 'Tarta de zapallitos y queso',
-        porciones: persons,
-        tiempo_minutos: 40,
-        dificultad: 'facil',
-        pasos: [
-          'Cortar los zapallitos en cubos y saltear con cebolla picada hasta que evapore el agua.',
-          'Escurrir muy bien para que no ablande la masa.',
-          'Mezclar con huevos batidos, queso cremoso en cubos y condimentos.',
-          'Forrar una tartera con la masa, rellenar y hornear a 180°C por 30 minutos.',
-        ],
-      },
-      analisis_plato: ['tarta de zapallitos: zapallito, cebolla, huevo, queso cremoso, tapa de tarta'],
-      ingredientes: [
-        { nombre: 'zapallito', cantidad: Math.max(3, Math.round(persons * 1.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: 'cebollas' },
-        { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'queso cremoso', cantidad: Math.round(persons * 75), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'huevo', cantidad: Math.max(2, Math.round(persons * 0.75)), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: 'huevos de campo' },
-      ],
-      advertencias: [],
-    };
-  }
-
-  // 5. Tortilla de verduras (FIDELIDAD AL PLATO: Verduras de hoja, NO papa)
+  // 14. Tortilla de verduras (NUNCA papa)
   if (reqLower.includes('tortilla') && reqLower.includes('verdura')) {
     return {
       modo: 'cocinar',
@@ -482,21 +812,27 @@ export function generateMockCookResponse(
         porciones: persons,
         tiempo_minutos: 25,
         dificultad: 'facil',
-        pasos: ['Lavar y blanquear acelga o espinaca.', 'Picar con cebolla salteada.', 'Mezclar con huevos y queso.', 'Cuajar la tortilla en sartén.'],
+        pasos: [
+          '1. Lavar 2 atados de espinaca y blanquear en agua hirviendo 2 minutos.',
+          '2. Escurrir bien presionando para eliminar todo el líquido y picar fino.',
+          `3. Picar ${Math.max(1, Math.round(persons * 0.25))} cebolla y rehogar en sartén con aceite.`,
+          `4. Batir ${Math.max(3, persons + 1)} huevo con sal y pimienta en un bol.`,
+          `5. Mezclar la espinaca, la cebolla y ${Math.round(persons * 50)} g de queso cremoso en cubos con los huevos.`,
+          '6. Calentar una sartén con un hilo de aceite y volcar la mezcla.',
+          '7. Cocinar 4 minutos, dar vuelta con plato y dorar 3 minutos más.',
+        ],
       },
-      analisis_plato: ['tortilla de verduras: espinaca, cebolla, huevo, queso cremoso'],
       ingredientes: [
         { nombre: 'espinaca', cantidad: 2, unidad: 'atado', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.25)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'huevo', cantidad: Math.max(3, persons + 1), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'queso cremoso', cantidad: Math.round(persons * 50), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'aceite de girasol', cantidad: 30, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
     };
   }
 
-  // 6. Fideos con salsa blanca (FIDELIDAD AL PLATO: Salsa blanca, NO salsa de tomate)
+  // 15. Fideos con salsa blanca (NUNCA tomate)
   if (reqLower.includes('fideo') && reqLower.includes('salsa blanca')) {
     return {
       modo: 'cocinar',
@@ -508,9 +844,16 @@ export function generateMockCookResponse(
         porciones: persons,
         tiempo_minutos: 20,
         dificultad: 'facil',
-        pasos: ['Hervir los fideos al dente.', 'Hacer salsa blanca con manteca, harina y leche.', 'Servir con queso rallado.'],
+        pasos: [
+          `1. Hervir ${Math.round(persons * 100)} g de fideos en abundante agua con sal hasta que estén al dente.`,
+          `2. Derretir ${Math.round(persons * 20)} g de manteca en una cacerola chica.`,
+          `3. Agregar ${Math.round(persons * 15)} g de harina 000 y cocinar 1 minuto revolviendo.`,
+          `4. Incorporar ${Math.round(persons * 150)} ml de leche tibia poco a poco sin dejar de batir.`,
+          '5. Cocinar a fuego bajo hasta espesar la salsa blanca y condimentar con nuez moscada.',
+          '6. Escurrir los fideos y mezclar en caliente con la salsa blanca.',
+          `7. Espolvorear con ${Math.round(persons * 20)} g de queso rallado y servir inmediatamente.`,
+        ],
       },
-      analisis_plato: ['fideos: fideos', 'salsa blanca: leche, manteca, harina 000, queso rallado'],
       ingredientes: [
         { nombre: 'fideos', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'leche', cantidad: Math.round(persons * 150), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
@@ -522,7 +865,7 @@ export function generateMockCookResponse(
     };
   }
 
-  // 7. Ensalada de lentejas (FIDELIDAD AL PLATO: Lentejas, NO lechuga)
+  // 16. Ensalada de lentejas (NUNCA lechuga)
   if (reqLower.includes('ensalada') && reqLower.includes('lenteja')) {
     return {
       modo: 'cocinar',
@@ -534,45 +877,28 @@ export function generateMockCookResponse(
         porciones: persons,
         tiempo_minutos: 20,
         dificultad: 'facil',
-        pasos: ['Hervir las lentejas o usar escurridas.', 'Mezclar con tomate y cebolla picados.', 'Agregar huevo duro y condimentar con aceite.'],
+        pasos: [
+          `1. Escurrir ${Math.round(persons * 100)} g de lentejas cocidas y volcar en una ensaladera.`,
+          `2. Lavar y picar ${Math.max(2, persons)} tomate perita en cubos chicos.`,
+          `3. Picar ${Math.max(1, Math.round(persons * 0.25))} cebolla en brunoise fina.`,
+          `4. Hervir ${Math.max(2, persons)} huevo duro durante 10 minutos y cortar en cuartos.`,
+          '5. Unir las lentejas con el tomate, la cebolla y los huevos en la ensaladera.',
+          `6. Condimentar con ${Math.round(persons * 10)} ml de aceite de oliva, sal y vinagre.`,
+          '7. Mezclar con cuidado para no romper los huevos y servir fresca.',
+        ],
       },
-      analisis_plato: ['ensalada de lentejas: lentejas, tomate perita, cebolla, huevo, aceite de oliva'],
       ingredientes: [
         { nombre: 'lentejas', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'tomate perita', cantidad: persons, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'huevo', cantidad: persons, unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'aceite de oliva', cantidad: 40, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tomate perita', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.25)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'huevo', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'aceite de oliva', cantidad: Math.round(persons * 10), unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
     };
   }
 
-  // 8. Pollo al horno con batata (FIDELIDAD AL PLATO: Batata, NO papa)
-  if (reqLower.includes('pollo') && reqLower.includes('batata')) {
-    return {
-      modo: 'cocinar',
-      fuera_de_tema: false,
-      mensaje: null,
-      aclaracion: null,
-      receta: {
-        nombre: 'Pollo al horno con batatas doradas',
-        porciones: persons,
-        tiempo_minutos: 60,
-        dificultad: 'facil',
-        pasos: ['Condimentar las presas de pollo.', 'Cortar las batatas en cuñas con aceite.', 'Hornear a 200°C hasta dorar.'],
-      },
-      analisis_plato: ['pollo al horno: pollo, condimentos', 'batatas al horno: batata, aceite de girasol'],
-      ingredientes: [
-        { nombre: 'pollo', cantidad: Math.round(persons * 300), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'batata', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'aceite de girasol', cantidad: 50, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null },
-      ],
-      advertencias: [],
-    };
-  }
-
-  // 9. Sopa de calabaza (FIDELIDAD AL PLATO: Calabaza / zapallo, NO papa)
+  // 17b. Sopa de calabaza (NUNCA papa)
   if (reqLower.includes('sopa') && (reqLower.includes('calabaza') || reqLower.includes('zapallo'))) {
     return {
       modo: 'cocinar',
@@ -580,23 +906,31 @@ export function generateMockCookResponse(
       mensaje: null,
       aclaracion: null,
       receta: {
-        nombre: 'Sopa crema de calabaza reconfortante',
+        nombre: 'Sopa crema de calabaza casera',
         porciones: persons,
         tiempo_minutos: 35,
         dificultad: 'facil',
-        pasos: ['Rehogar cebolla.', 'Agregar calabaza en cubos con agua o caldo.', 'Cocinar y procesar con crema.'],
+        pasos: [
+          `1. Pelar y cortar ${Math.round(persons * 250)} g de calabaza en cubos parejos.`,
+          `2. Picar ${Math.max(1, Math.round(persons * 0.5))} cebolla y dorar en cacerola con ${Math.round(persons * 10)} g de manteca.`,
+          '3. Sumar la calabaza y cubrir con caldo de verduras hirviendo.',
+          '4. Cocinar a fuego medio durante 20 minutos hasta que la calabaza esté muy tierna.',
+          `5. Agregar ${Math.round(persons * 30)} ml de leche o crema de leche y salpimentar.`,
+          '6. Procesar con mixer o licuadora hasta lograr una textura aterciopelada y cremosa.',
+          '7. Servir caliente con un chorrito de aceite de oliva.',
+        ],
       },
-      analisis_plato: ['sopa de calabaza: zapallo anco, cebolla, crema de leche'],
       ingredientes: [
-        { nombre: 'zapallo anco', cantidad: Math.round(persons * 300), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'crema de leche', cantidad: Math.round(persons * 40), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'calabaza', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'manteca', cantidad: Math.round(persons * 10), unidad: 'g', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'leche', cantidad: Math.round(persons * 30), unidad: 'ml', categoria: 'lacteos', es_basico: false, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
     };
   }
 
-  // Asado o genérico parrilla
+  // 17. Asado
   if (reqLower.includes('asado') || reqLower.includes('parrilla')) {
     return {
       modo: 'cocinar',
@@ -604,21 +938,25 @@ export function generateMockCookResponse(
       mensaje: null,
       aclaracion: null,
       receta: {
-        nombre: 'Asado argentino completo',
+        nombre: 'Asado tradicional argentino',
         porciones: persons,
         tiempo_minutos: 90,
         dificultad: 'media',
         pasos: [
-          'Prender el fuego con leña o carbón.',
-          'Limpiar la parrilla y colocar los cortes con brasas moderadas.',
-          'Asar despacio girando solo cuando tome color.',
+          `1. Encender el fuego usando ${Math.max(1, Math.round(persons / 4))} paquete de carbon o leña seca hasta lograr brasas moderadas.`,
+          '2. Limpiar bien la parrilla caliente.',
+          `3. Colocar ${Math.round(persons * 400)} g de tira de asado y ${Math.round(persons * 200)} g de vacio con sal gruesa a fuego parejo.`,
+          `4. Sumar ${Math.max(2, persons)} chorizo en la parte media de la parrilla.`,
+          '5. Cocinar 50 minutos del lado del hueso sin apurar el fuego.',
+          '6. Dar vuelta la carne y asar 30 minutos más hasta que esté dorada y jugosa.',
+          `7. Servir los chorizos y los cortes de carne caliente acompañados de ${Math.max(2, persons)} unidad de pan fresco.`,
         ],
       },
-      analisis_plato: ['asado parrillero: tira de asado, chorizo, pan, carbon'],
       ingredientes: [
         { nombre: 'tira de asado', cantidad: Math.round(persons * 400), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'chorizo', cantidad: persons, unidad: 'unidad', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-        { nombre: 'pan', cantidad: persons, unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'vacio', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'chorizo', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'pan', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
         { nombre: 'carbon', cantidad: Math.max(1, Math.round(persons / 4)), unidad: 'paquete', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
       ],
       advertencias: [],
@@ -669,6 +1007,13 @@ export function generateMockSuggestResponse(
         tiempo_minutos: 20,
         dificultad: 'facil',
         por_que_conviene: 'Aprovecha el arroz, los huevos y las cebollas que ya tenés en la despensa.',
+        pasos: [
+          '1. Calentar una sartén o wok grande con un chorrito de aceite.',
+          '2. Picar 2 cebollas bien finitas y saltear hasta transparentar.',
+          '3. Incorporar 320 g de arroz cocido y saltear a fuego fuerte por 3 minutos.',
+          '4. Hacer un hueco en el centro, cascar 4 huevos y revolver hasta que cuajen bien.',
+          '5. Opcionalmente rociar con 30 ml de salsa de soja, mezclar todo y servir caliente.',
+        ],
         analisis_plato: ['arroz salteado: arroz, cebolla, huevo, salsa de soja'],
         ingredientes: [
           { nombre: 'arroz', cantidad: 320, unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: 'arroz largo fino' },
@@ -683,6 +1028,14 @@ export function generateMockSuggestResponse(
         tiempo_minutos: 35,
         dificultad: 'facil',
         por_que_conviene: 'Tenés cebolla y huevos; solo necesitás sumar unas papas a la lista.',
+        pasos: [
+          '1. Pelar 800 g de papa y cortar en rodajas finas o dados parejos.',
+          '2. Picar 2 cebollas en juliana y dorar suavemente en sartén con un chorrito de aceite.',
+          '3. Freír las papas en 150 ml de aceite de girasol hasta que estén tiernas y doradas.',
+          '4. Batir 5 huevos en un bol grande con sal.',
+          '5. Escurrir las papas y mezclar calientes con la cebolla y los huevos batidos.',
+          '6. Volcar en la sartén caliente y cocinar 4 minutos por lado hasta que cuaje.',
+        ],
         analisis_plato: ['tortilla de papas: papa, cebolla, huevo, aceite de girasol'],
         ingredientes: [
           { nombre: 'papa', cantidad: 800, unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
@@ -697,6 +1050,14 @@ export function generateMockSuggestResponse(
         tiempo_minutos: 25,
         dificultad: 'facil',
         por_que_conviene: 'Un clásico porteño y patagónico rápido con huevos y cebolla.',
+        pasos: [
+          '1. Pelar 600 g de papa y cortar en papas pay bien finitas.',
+          '2. Freír las papas pay en aceite bien caliente hasta dejarlas crocantes y reservar.',
+          '3. Cortar 150 g de jamon cocido en juliana fina y dorar un minuto en sartén.',
+          '4. Batir 4 huevos con una pizca de sal y pimienta.',
+          '5. Sumar las papas fritas y los huevos a la sartén revolviendo suave para que el huevo quede cremoso y babé.',
+          '6. Incorporar 1 lata de arvejas escurridas y servir de inmediato.',
+        ],
         analisis_plato: ['revuelto gramajo: papa, jamon cocido, huevo, arvejas'],
         ingredientes: [
           { nombre: 'papa', cantidad: 600, unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },

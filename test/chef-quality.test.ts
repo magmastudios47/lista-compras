@@ -665,99 +665,211 @@ describe('Suite de Calidad del Chef IA - Lista Compars (20 Casos Reales)', () =>
   });
 });
 
-describe('FIDELIDAD AL PLATO - Pruebas de Regresión (Debe incluir / No debe incluir)', () => {
-  it('1. milanesa con puré de zapallo para 4: incluye nalga, pan rallado, zapallo, manteca, leche; NO incluye papa', () => {
+describe('FIDELIDAD AL PLATO - Pruebas de Regresión Ronda 4 (Debe incluir / No debe incluir)', () => {
+  // Helper de validación de receta primero: 5-10 pasos y cantidades en los pasos
+  function validateRecipeQuality(parsed: any) {
+    expect(parsed.receta).toBeDefined();
+    expect(parsed.receta.pasos).toBeDefined();
+    expect(parsed.receta.pasos.length).toBeGreaterThanOrEqual(5);
+    expect(parsed.receta.pasos.length).toBeLessThanOrEqual(10);
+    // Cada ingrediente de la lista debe tener coherencia con los pasos
+    const pasosText = parsed.receta.pasos.join(' ').toLowerCase();
+    for (const ing of parsed.ingredientes) {
+      if (!ing.opcional && !ing.es_basico) {
+        // El ingrediente o su raíz debe figurar en los pasos
+        const norm = ing.nombre.toLowerCase().split(' ')[0];
+        expect(pasosText.includes(norm)).toBe(true);
+      }
+    }
+  }
+
+  it('1. pastel de papas para 4: incluye carne picada, papa, cebolla, huevo, manteca, leche; NO arroz ni fideos', () => {
+    const res = generateMockCookResponse('pastel de papas para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
+    expect(ingNames.some((n) => n.includes('carne picada'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('papa'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('cebolla'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('huevo'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('manteca'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('leche'))).toBe(true);
+
+    expect(ingNames.some((n) => n.includes('arroz') || n.includes('fideo'))).toBe(false);
+  });
+
+  it('2. pastel de papas con pollo para 4: incluye pollo y NO carne picada', () => {
+    const res = generateMockCookResponse('pastel de papas con pollo para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
+    expect(ingNames.some((n) => n.includes('pollo'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('carne picada'))).toBe(false);
+    expect(ingNames.some((n) => n.includes('arroz'))).toBe(false);
+  });
+
+  it('3. milanesa con puré de zapallo para 4: incluye nalga, pan rallado, zapallo, manteca, leche; NO papa', () => {
     const res = generateMockCookResponse('milanesa con puré de zapallo para 4', 4, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato).toBeDefined();
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
-
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
 
-    // Debe incluir: nalga, pan rallado, zapallo/zapallo anco, manteca, leche
     expect(ingNames.some((n) => n.includes('nalga'))).toBe(true);
     expect(ingNames.some((n) => n.includes('pan rallado'))).toBe(true);
     expect(ingNames.some((n) => n.includes('zapallo'))).toBe(true);
     expect(ingNames.some((n) => n.includes('manteca'))).toBe(true);
     expect(ingNames.some((n) => n.includes('leche'))).toBe(true);
 
-    // NO debe incluir papa
     expect(ingNames.some((n) => n === 'papa' || n.includes('papa'))).toBe(false);
   });
 
-  it('2. ensalada de papa para 4: incluye papa', () => {
-    const res = generateMockCookResponse('ensalada de papa para 4', 4, [], []);
+  it('4. milanesa napolitana para 4: incluye jamón, muzzarella, salsa de tomate; NO arroz', () => {
+    const res = generateMockCookResponse('milanesa napolitana para 4', 4, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
-    expect(ingNames.some((n) => n.includes('papa'))).toBe(true);
+
+    expect(ingNames.some((n) => n.includes('jamon'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('muzzarella'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('salsa de tomate'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('arroz'))).toBe(false);
   });
 
-  it('3. tarta de zapallitos para 4: incluye zapallito; NO zapallo anco', () => {
+  it('5. tarta de jamón y queso para 4: NO carne', () => {
+    const res = generateMockCookResponse('tarta de jamón y queso para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
+    expect(ingNames.some((n) => n.includes('jamon'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('queso'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('carne') || n.includes('pollo'))).toBe(false);
+  });
+
+  it('6. ñoquis de papa para 4: NO arroz', () => {
+    const res = generateMockCookResponse('ñoquis de papa para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
+    expect(ingNames.some((n) => n.includes('papa'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('harina'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('arroz'))).toBe(false);
+  });
+
+  it('7. tarta de zapallitos para 4: NO zapallo anco', () => {
     const res = generateMockCookResponse('tarta de zapallitos para 4', 4, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
     expect(ingNames.some((n) => n.includes('zapallito'))).toBe(true);
     expect(ingNames.some((n) => n.includes('zapallo anco') || n === 'zapallo')).toBe(false);
   });
 
-  it('4. tortilla de verduras para 3: NO incluye papa', () => {
+  it('8. pollo al horno con batata para 4: NO papa', () => {
+    const res = generateMockCookResponse('pollo al horno con batata para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+
+    expect(ingNames.some((n) => n.includes('pollo'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('batata'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('papa'))).toBe(false);
+  });
+
+  it('9. Platos no catalogados: bondiola braseada con puré de calabaza', () => {
+    const res = generateMockCookResponse('bondiola braseada con puré de calabaza para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+    expect(ingNames.some((n) => n.includes('bondiola'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('zapallo') || n.includes('calabaza'))).toBe(true);
+  });
+
+  it('10. Platos no catalogados: tarta de choclo', () => {
+    const res = generateMockCookResponse('tarta de choclo para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+    expect(ingNames.some((n) => n.includes('choclo'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('tapa de tarta'))).toBe(true);
+  });
+
+  it('11. Platos no catalogados: guiso de mondongo', () => {
+    const res = generateMockCookResponse('guiso de mondongo para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+    expect(ingNames.some((n) => n.includes('mondongo'))).toBe(true);
+    expect(ingNames.some((n) => n.includes('poroto'))).toBe(true);
+  });
+
+  it('12. ensalada de papa para 4: incluye papa', () => {
+    const res = generateMockCookResponse('ensalada de papa para 4', 4, [], []);
+    const parsed = CookResponseSchema.parse(res);
+
+    validateRecipeQuality(parsed);
+    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
+    expect(ingNames.some((n) => n.includes('papa'))).toBe(true);
+  });
+
+  it('13. tortilla de verduras para 3: NO incluye papa', () => {
     const res = generateMockCookResponse('tortilla de verduras para 3', 3, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
     expect(ingNames.some((n) => n.includes('papa'))).toBe(false);
   });
 
-  it('5. fideos con salsa blanca para 2: incluye crema de leche o leche y manteca; NO salsa de tomate', () => {
+  it('14. fideos con salsa blanca para 2: incluye crema de leche o leche y manteca; NO salsa de tomate', () => {
     const res = generateMockCookResponse('fideos con salsa blanca para 2', 2, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
     const hasWhiteSauce = ingNames.some((n) => n.includes('leche')) && ingNames.some((n) => n.includes('manteca'));
     expect(hasWhiteSauce).toBe(true);
     expect(ingNames.some((n) => n.includes('tomate'))).toBe(false);
   });
 
-  it('6. ensalada de lentejas para 4: incluye lentejas; NO lechuga', () => {
+  it('15. ensalada de lentejas para 4: incluye lentejas; NO lechuga', () => {
     const res = generateMockCookResponse('ensalada de lentejas para 4', 4, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
     expect(ingNames.some((n) => n.includes('lenteja'))).toBe(true);
     expect(ingNames.some((n) => n.includes('lechuga'))).toBe(false);
   });
 
-  it('7. pollo al horno con batata para 4: incluye batata; NO papa', () => {
-    const res = generateMockCookResponse('pollo al horno con batata para 4', 4, [], []);
-    const parsed = CookResponseSchema.parse(res);
-
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
-    const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
-    expect(ingNames.some((n) => n.includes('batata'))).toBe(true);
-    expect(ingNames.some((n) => n.includes('papa'))).toBe(false);
-  });
-
-  it('8. sopa de calabaza para 4: incluye zapallo o calabaza; NO papa', () => {
+  it('16. sopa de calabaza para 4: incluye zapallo o calabaza; NO papa', () => {
     const res = generateMockCookResponse('sopa de calabaza para 4', 4, [], []);
     const parsed = CookResponseSchema.parse(res);
 
-    expect(parsed.analisis_plato.length).toBeGreaterThan(0);
+    validateRecipeQuality(parsed);
     const ingNames = parsed.ingredientes.map((i) => i.nombre.toLowerCase());
     expect(ingNames.some((n) => n.includes('calabaza') || n.includes('zapallo'))).toBe(true);
     expect(ingNames.some((n) => n.includes('papa'))).toBe(false);
   });
 });
 
-describe('Chef IA - Pruebas de Flujo Punta a Punta (End-to-End)', () => {
-  it('Flujo punta a punta: Modo Cocinar con descuento de despensa y adición a lista', () => {
+describe('Chef IA - Pruebas de Flujo Punta a Punta Ronda 4 (End-to-End)', () => {
+  it('Flujo punta a punta: Modo Cocinar con receta de 8 pasos, vista previa, descuento de despensa y adición a lista', () => {
     // 1. Pedido del usuario
     const pedido = 'milanesa con puré de zapallo para 4';
     const personas = 4;
@@ -788,13 +900,14 @@ describe('Chef IA - Pruebas de Flujo Punta a Punta (End-to-End)', () => {
       },
     ];
 
-    // 3. Respuesta del Chef
+    // 3. Respuesta del Chef en modo cocinar
     const response = generateMockCookResponse(pedido, personas, [], pantry);
     const parsed = CookResponseSchema.parse(response);
 
     expect(parsed.modo).toBe('cocinar');
     expect(parsed.receta?.nombre).toBe('Milanesas con puré de zapallo');
-    expect(parsed.analisis_plato.length).toBe(2);
+    expect(parsed.receta?.pasos.length).toBeGreaterThanOrEqual(5);
+    expect(parsed.receta?.pasos.length).toBeLessThanOrEqual(10);
 
     // 4. Vista previa y cálculo determinista de faltantes contra la despensa
     const comparisons = calculatePantryDiscounts(parsed.ingredientes, pantry);
@@ -833,7 +946,7 @@ describe('Chef IA - Pruebas de Flujo Punta a Punta (End-to-End)', () => {
     expect(itemsParaLista.some((i) => i.name.includes('zapallo'))).toBe(true);
   });
 
-  it('Flujo punta a punta: Modo Sugerir desde despensa y selección de receta faltante', () => {
+  it('Flujo punta a punta: Modo Sugerir desde despensa con receta detallada y selección de faltante', () => {
     // 1. Despensa con arroz y huevos
     const pantry: PantryItem[] = [
       {
@@ -867,10 +980,11 @@ describe('Chef IA - Pruebas de Flujo Punta a Punta (End-to-End)', () => {
     expect(parsedSuggest.modo).toBe('sugerir');
     expect(parsedSuggest.recetas.length).toBe(3);
 
-    // Cada receta debe tener analisis_plato
+    // Cada receta debe tener pasos detallados e ingredientes
     parsedSuggest.recetas.forEach((receta) => {
-      expect(receta.analisis_plato).toBeDefined();
-      expect(receta.analisis_plato.length).toBeGreaterThan(0);
+      expect(receta.pasos || receta.receta?.pasos).toBeDefined();
+      const pasos = receta.pasos || receta.receta?.pasos || [];
+      expect(pasos.length).toBeGreaterThanOrEqual(5);
       expect(receta.ingredientes.length).toBeGreaterThan(0);
     });
 

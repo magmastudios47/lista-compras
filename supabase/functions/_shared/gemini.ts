@@ -4,13 +4,19 @@ import { CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt';
 export interface GeminiCallOptions {
   systemPrompt?: string;
   userData: {
-    modo: 'cocinar' | 'sugerir' | 'interpretar_items' | 'interpretar_despensa';
+    modo: 'cocinar' | 'sugerir' | 'interpretar_items' | 'interpretar_despensa' | 'menu' | 'planificar_semana';
     pedido?: string;
     personas?: number;
     restricciones?: string[];
     despensa?: string[];
     texto_despensa?: string;
+    dias_config?: any;
+    objetivo_perfil?: string;
+    objetivo_detalle?: string;
+    platos_obligatorios?: string;
+    platos_ya_elegidos?: string[];
   };
+  thinkingBudget?: number;
 }
 
 export interface GeminiResponse<T> {
@@ -18,14 +24,16 @@ export interface GeminiResponse<T> {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  modelUsed: string;
 }
 
 export class GeminiClient {
   private apiKey: string;
-  private model: string;
+  private chefModel: string;
+  private fastModel: string;
   private baseUrl: string;
 
-  constructor(apiKey?: string, model?: string) {
+  constructor(apiKey?: string, chefModel?: string, fastModel?: string) {
     // Soporte para entornos Deno (Supabase Edge Functions) y Node.js (Vitest)
     const envApiKey =
       apiKey ||
@@ -34,15 +42,23 @@ export class GeminiClient {
         : process.env.GEMINI_API_KEY) ||
       '';
 
-    const envModel =
-      model ||
+    const envChefModel =
+      chefModel ||
       (typeof Deno !== 'undefined'
-        ? Deno.env.get('GEMINI_MODEL')
-        : process.env.GEMINI_MODEL) ||
+        ? Deno.env.get('GEMINI_MODEL_CHEF') || Deno.env.get('GEMINI_MODEL')
+        : process.env.GEMINI_MODEL_CHEF || process.env.GEMINI_MODEL) ||
       'gemini-2.5-flash';
 
+    const envFastModel =
+      fastModel ||
+      (typeof Deno !== 'undefined'
+        ? Deno.env.get('GEMINI_MODEL_FAST')
+        : process.env.GEMINI_MODEL_FAST) ||
+      'gemini-2.0-flash-lite';
+
     this.apiKey = envApiKey;
-    this.model = envModel;
+    this.chefModel = envChefModel;
+    this.fastModel = envFastModel;
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   }
 
@@ -60,7 +76,13 @@ export class GeminiClient {
 
     const systemInstruction = options.systemPrompt || CHEF_SYSTEM_PROMPT;
 
-    // Inyectar datos del usuario estrictamente como DATOS estructurados, NUNCA concatenados como instrucciones
+    // Seleccionar modelo adecuado: FAST para interpretar_items, CHEF para cocinar/sugerir/planificar
+    const isFastMode =
+      options.userData.modo === 'interpretar_items' ||
+      options.userData.modo === 'interpretar_despensa';
+    const activeModel = isFastMode ? this.fastModel : this.chefModel;
+
+    // Inyectar datos del usuario estrictamente como DATOS estructurados
     const safePayload = {
       INSTRUCCION_SISTEMA: 'Procesa los siguientes DATOS según tus reglas culinarias.',
       DATOS_CONSULTA: {
@@ -70,10 +92,37 @@ export class GeminiClient {
         restricciones_dietarias: options.userData.restricciones || [],
         productos_despensa: (options.userData.despensa || []).slice(0, 100),
         texto_libre_despensa: options.userData.texto_despensa?.slice(0, 2000) || null,
+        dias_config: options.userData.dias_config || null,
+        objetivo_perfil: options.userData.objetivo_perfil || null,
+        objetivo_detalle: options.userData.objetivo_detalle || null,
+        platos_obligatorios: options.userData.platos_obligatorios || null,
+        platos_ya_elegidos: options.userData.platos_ya_elegidos || null,
       },
     };
 
-    const endpoint = `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const endpoint = `${this.baseUrl}/models/${activeModel}:generateContent?key=${this.apiKey}`;
+
+    const envThinking =
+      typeof Deno !== 'undefined'
+        ? Deno.env.get('GEMINI_THINKING_BUDGET')
+        : process.env.GEMINI_THINKING_BUDGET;
+
+    const thinkingBudget =
+      options.thinkingBudget !== undefined
+        ? options.thinkingBudget
+        : envThinking !== undefined
+        ? parseInt(envThinking, 10)
+        : undefined;
+
+    const generationConfig: any = {
+      temperature: 0.35, // Temperatura baja 0.3 a 0.4 para consistencia y rigor culinario
+      maxOutputTokens: 3000,
+      responseMimeType: 'application/json',
+    };
+
+    if (thinkingBudget !== undefined && !isNaN(thinkingBudget)) {
+      generationConfig.thinkingConfig = { thinkingBudget };
+    }
 
     const requestBody = {
       systemInstruction: {
@@ -85,11 +134,7 @@ export class GeminiClient {
           parts: [{ text: JSON.stringify(safePayload, null, 2) }],
         },
       ],
-      generationConfig: {
-        temperature: 0.2, // Baja temperatura para consistencia de ingredientes y respuestas deterministas
-        maxOutputTokens: 2048,
-        responseMimeType: 'application/json',
-      },
+      generationConfig,
     };
 
     let response: Response;
@@ -159,6 +204,7 @@ export class GeminiClient {
       promptTokens: usage.promptTokenCount || 0,
       completionTokens: usage.candidatesTokenCount || 0,
       totalTokens: usage.totalTokenCount || 0,
+      modelUsed: activeModel,
     };
   }
 }

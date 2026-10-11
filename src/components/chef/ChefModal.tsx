@@ -22,6 +22,9 @@ import {
   ArrowRight,
   ShieldAlert,
   Tag,
+  ChevronDown,
+  ChevronUp,
+  BookOpen,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -51,12 +54,14 @@ export const ChefModal: React.FC<ChefModalProps> = ({
     response: ChefCookResponse;
     comparisons: DiscountComparisonResult[];
   } | null>(null);
+  const [showCookSteps, setShowCookSteps] = useState(false);
 
   // Estado Modo Sugerir
   const [suggestFreeText, setSuggestFreeText] = useState('');
   const [suggestRecipes, setSuggestRecipes] = useState<ChefSuggestRecipe[] | null>(null);
   const [selectedSuggestRecipe, setSelectedSuggestRecipe] = useState<ChefSuggestRecipe | null>(null);
   const [suggestComparisons, setSuggestComparisons] = useState<DiscountComparisonResult[] | null>(null);
+  const [showSuggestSteps, setShowSuggestSteps] = useState(false);
 
   if (!isOpen) return null;
 
@@ -329,6 +334,40 @@ export const ChefModal: React.FC<ChefModalProps> = ({
               </div>
             )}
 
+            {/* Receta paso a paso (sección colapsable para ver de dónde sale cada ingrediente) */}
+            {cookPreview.response.receta?.pasos && cookPreview.response.receta.pasos.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowCookSteps(!showCookSteps)}
+                  className="w-full p-3 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-chef-600 dark:text-chef-400" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Receta paso a paso ({cookPreview.response.receta.pasos.length} pasos)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                    <span>{showCookSteps ? 'Ocultar' : 'Ver preparación'}</span>
+                    {showCookSteps ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </div>
+                </button>
+                {showCookSteps && (
+                  <div className="p-3.5 pt-1 space-y-2 border-t border-slate-100 dark:border-slate-800/60 max-h-56 overflow-y-auto">
+                    {cookPreview.response.receta.pasos.map((paso, idx) => (
+                      <div key={idx} className="flex gap-2.5 text-xs text-slate-700 dark:text-slate-300">
+                        <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <p className="leading-relaxed flex-1">{paso.replace(/^\d+[\.\)]\s*/, '')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Checklist interactivo de ingredientes con descuento determinista */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -535,6 +574,44 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                 );
               })()}
             </div>
+
+            {/* Pasos colapsables de la receta sugerida */}
+            {(() => {
+              const pasos = selectedSuggestRecipe.pasos || selectedSuggestRecipe.receta?.pasos;
+              if (!pasos || pasos.length === 0) return null;
+              return (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestSteps(!showSuggestSteps)}
+                    className="w-full p-2.5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-3.5 h-3.5 text-chef-600 dark:text-chef-400" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Pasos de la receta ({pasos.length} pasos)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                      <span>{showSuggestSteps ? 'Ocultar' : 'Ver preparación'}</span>
+                      {showSuggestSteps ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </div>
+                  </button>
+                  {showSuggestSteps && (
+                    <div className="p-3 pt-1 space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 max-h-48 overflow-y-auto">
+                      {pasos.map((paso, idx) => (
+                        <div key={idx} className="flex gap-2 text-xs text-slate-700 dark:text-slate-300">
+                          <span className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <p className="leading-relaxed flex-1">{paso.replace(/^\d+[\.\)]\s*/, '')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="space-y-1.5 max-h-56 overflow-y-auto">
               {suggestComparisons.map((c, i) => (

@@ -140,7 +140,14 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   - **Tolerancia a fallos en Supabase & Edge Functions**: Si las Edge Functions o las políticas RLS rechazan una llamada antes de autenticarse completamente, los hooks (`useShoppingList`, `usePantry`, `useChefAi`) capturan el error de forma transparente y ejecutan los motores locales de procesamiento argentino y optimización de despensa sin interrumpir la experiencia de usuario.
   - **Invalidación de Caché PWA**: Se actualizó la versión de caché del Service Worker a `compars-v1.0.1` para forzar a los dispositivos a descartar los bundles anteriores.
 
+---
 
-
-
-
+### Decisión 16: Ronda 4 Bloque 1 - Chef que crea la receta libremente (Receta Primero, Ingredientes Después)
+- **Contexto**: Anteriormente el modelo generaba un campo `analisis_plato` y luego inventaba ingredientes desconectados de los pasos o alucinaba almidones (como arroz en pastel de papas). El usuario determinó que NO debe haber recetas pregrabadas ni recetario inyectado: la IA debe generar la receta libremente como un buen cocinero casero argentino.
+- **Decisión**:
+  1. **Eliminación de Recetario de Referencia**: La IA no recibe inyección de recetas fijas.
+  2. **Validación Silenciosa de 32 Platos Clásicos (`culinarySanityCheck.ts`)**: Mantiene una lista estricta de ingredientes manifiestamente absurdos (ej: arroz o fideos en pastel de papas, papa en puré de zapallo). Solo se aplica en el servidor/cliente si el plato coincide; si es un plato no catalogado o raro, no se modifica nada.
+  3. **Receta Primero**: El JSON se genera obligatoriamente en este orden: primero `receta` con 5 a 10 pasos detallados con cantidades expresadas en los pasos; y luego `ingredientes` extraídos de esos pasos. Esto reemplaza formalmente al campo `analisis_plato`.
+  4. **Validación Servidor de Ingredientes contra Pasos**: Los ingredientes de la lista que no aparezcan en los pasos se marcan automáticamente como `opcional: true` y quedan destildados por defecto en la vista previa del carrito.
+  5. **Modelos y Thinking**: Se desacopló `GEMINI_MODEL_CHEF` (`gemini-2.5-flash` a temperatura 0.35 con pensamiento leve de 1024 tokens) de `GEMINI_MODEL_FAST` (`gemini-2.0-flash-lite` para interpretar ítems), logrando máxima precisión culinaria y óptimo consumo de cuota gratuita.
+  6. **UI**: Se agregó un acordeón colapsable en la vista previa del chef para consultar los pasos detallados de la receta antes de agregar los faltantes a la lista.
