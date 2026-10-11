@@ -114,12 +114,12 @@
   - [x] Adaptación de plan a perfil/objetivo con `por_que_encaja` específico
   - [x] Aviso único: eliminar duplicación de cartel amarillo y rojo
   - [x] Actualización de prompt del sistema (`planificar_semana`) y pruebas de menú completo (7 días x 4 comidas) con medición de llamadas a IA
-- [ ] **Bloque 3: Despensa Automática al Marcar Comprado**
-  - [ ] Configuración de hogar "Al marcar como comprado": Preguntar / Sumar automáticamente / No sumar (sincronizada en hogar)
-  - [ ] Modo automático: suma inmediata por normalizador, toast con Deshacer y reversión si se desmarca
-  - [ ] Exclusión configurable de productos de limpieza
-  - [ ] Operación idempotente y soporte offline sin duplicar
-  - [ ] Pruebas unitarias y de integración de los tres modos, reversión y concurrencia
+- [x] **Bloque 3: Despensa Automática al Marcar Comprado**
+  - [x] Configuración de hogar "Al marcar como comprado": Preguntar / Sumar automáticamente / No sumar (sincronizada en hogar)
+  - [x] Modo automático: suma inmediata por normalizador, toast con Deshacer y reversión si se desmarca
+  - [x] Exclusión configurable de productos de limpieza
+  - [x] Operación idempotente y soporte offline sin duplicar
+  - [x] Pruebas unitarias y de integración de los tres modos, reversión y concurrencia
 - [ ] **Bloque 4: Precios Automáticos (SEPA / Precios Claros)**
   - [ ] Verificación de fuentes oficiales abiertas SEPA / Precios Claros y documentación de cobertura en Junín de los Andes / Neuquén
   - [ ] Script importador batch local / tarea periódica con cálculo de mediana descartando valores atípicos

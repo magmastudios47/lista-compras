@@ -4,6 +4,7 @@ import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, INITIAL_PANTRY_SEED, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { singularizeIngredient } from '../lib/normalizer';
+import { pantrySyncManager } from '../lib/pantryAutoSync';
 
 export function usePantry() {
   const { household } = useHousehold();
@@ -318,6 +319,57 @@ export function usePantry() {
     return () => clearTimeout(timer);
   }, [undoPantryState, commitClearPantryNow]);
 
+  // Revertir adición originada por ítem de compras
+  const revertPantryAddition = useCallback(
+    async (shoppingItemId: string): Promise<boolean> => {
+      const record = pantrySyncManager.getRecord(shoppingItemId);
+      if (!record) return false;
+
+      const norm = record.normalizedName;
+      const target = pantryItems.find((p) => p.id === record.pantryItemId || p.normalized_name === norm);
+
+      if (target) {
+        let newQty = target.quantity;
+        if (record.quantityAdded !== null && target.quantity !== null) {
+          newQty = Math.max(0, target.quantity - record.quantityAdded);
+        } else if (record.quantityAdded !== null) {
+          newQty = 0;
+        }
+
+        const updated: PantryItem = {
+          ...target,
+          quantity: newQty,
+          updated_at: new Date().toISOString(),
+        };
+
+        setPantryItems((prev) => {
+          const next = prev.map((p) => (p.id === target.id ? updated : p));
+          offlineStorage.savePantryItems(next);
+          return next;
+        });
+
+        if (isConfigured) {
+          try {
+            await supabase
+              .from('pantry_items')
+              .update({ quantity: newQty, updated_at: updated.updated_at })
+              .eq('id', target.id);
+          } catch {}
+        } else {
+          offlineStorage.enqueueMutation({
+            table: 'pantry_items',
+            action: 'update',
+            payload: updated,
+          });
+        }
+      }
+
+      pantrySyncManager.removeRecord(shoppingItemId);
+      return true;
+    },
+    [pantryItems]
+  );
+
   // Ítems activos (sin borrado lógico)
   const activePantryItems = pantryItems.filter((p) => !p.deleted_at);
 
@@ -330,6 +382,7 @@ export function usePantry() {
     addMultiplePantryItems,
     updatePantryItem,
     deletePantryItem,
+    revertPantryAddition,
     clearAllPantry,
     undoClearPantry,
     commitClearPantryNow,

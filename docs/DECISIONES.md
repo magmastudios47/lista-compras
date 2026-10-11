@@ -169,3 +169,20 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   3. **Bebidas en Desayuno y Merienda**: Cada desayuno y merienda incluye una bebida variada (café con leche, mate cocido, licuado, té, yogur bebible), cuyos insumos se suman a la lista excepto básicos de despensa.
   4. **Aviso Único y Limpieza Visual**: Se eliminó la duplicación de carteles de advertencia. Solo se renderiza un banner amarillo permanente de recomendación general; el aviso rojo se reserva exclusivamente para advertencias médicas auténticas devueltas por la IA.
 
+---
+
+### Decisión 18: Ronda 4 Bloque 3 - Despensa Automática al Marcar Comprado, Reversión Idempotente y Exclusión de Limpieza
+- **Contexto**: Confirmar manualmente "¿Sumar a la despensa?" por cada ítem marcado como comprado resultaba tedioso durante la compra en el supermercado.
+- **Decisión**:
+  1. **Ajuste del Hogar Sincronizado**:
+     - Opciones: "Preguntar" (`ask`, por defecto), "Sumar automáticamente a la despensa" (`auto`) o "No sumar" (`never`).
+     - En el modal de confirmación se incorporó el enlace *"Sumar siempre (no volver a preguntar)"* que persiste la preferencia `auto` para todo el hogar.
+     - Cualquier miembro puede modificarlo desde la configuración del hogar, sincronizándose vía Supabase Realtime y almacenamiento local offline.
+  2. **Exclusión Configurable de Limpieza**:
+     - Por defecto (`pantry_exclude_cleaning: true`), los productos clasificados como `'limpieza'` (lavandina, detergente, desinfectante) no se suman a la despensa de alimentos ni disparan consultas. Puede desactivarse desde los ajustes del hogar.
+  3. **Rastreo de Procedencia y Reversión Idempotente (`PantryAutoSyncManager`)**:
+     - Cada producto sumado a la despensa desde la lista de compras genera un registro de procedencia (`PantrySyncRecord`: `shoppingItemId`, `pantryItemId`, `quantityAdded`).
+     - Al desmarcar un ítem (volver a "falta comprar") o al presionar "Deshacer" en el toast discreto de 6 segundos, se resta con precisión la cantidad sumada (`calculateRevertedPantryItem`), garantizando que la despensa nunca quede con valores negativos (`Math.max(0, ...)`).
+     - La verificación de registro previo previene sumas duplicadas si dos integrantes marcan ítems simultáneamente.
+
+

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Category, ShoppingItem, Unit } from '../../types';
 import { CATEGORIES } from '../../lib/constants';
-import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag, MoreVertical, X, AlertTriangle, Tag } from 'lucide-react';
+import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, ShoppingBag, MoreVertical, X, AlertTriangle, Tag, CheckCircle } from 'lucide-react';
 import { AddItemDrawer } from './AddItemDrawer';
 import { saveHouseholdPrice } from '../../lib/priceMemory';
+import { useHousehold } from '../../context/HouseholdContext';
+import { evaluatePantryAddAction } from '../../lib/pantryAutoSync';
 
 interface ShoppingListProps {
   items: ShoppingItem[];
@@ -23,7 +25,9 @@ interface ShoppingListProps {
   onUndoClear: () => Promise<void>;
   onCommitClearNow?: () => Promise<void>;
   onUpdateItem?: (id: string, updates: Partial<ShoppingItem>) => Promise<void>;
-  onAddToPantryPrompt: (item: ShoppingItem) => void;
+  onAddToPantryPrompt: (item: ShoppingItem, setAutoAlways?: boolean) => void;
+  onAutoAddToPantry?: (item: ShoppingItem) => Promise<void>;
+  onRevertPantry?: (shoppingItemId: string) => Promise<boolean>;
   onOpenChefModal: () => void;
 }
 
@@ -42,11 +46,15 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
   onUndoClear,
   onCommitClearNow,
   onAddToPantryPrompt,
+  onAutoAddToPantry,
+  onRevertPantry,
   onOpenChefModal,
 }) => {
+  const { household } = useHousehold();
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [showBought, setShowBought] = useState(true);
   const [itemJustBought, setItemJustBought] = useState<ShoppingItem | null>(null);
+  const [autoAddedToast, setAutoAddedToast] = useState<{ shoppingItemId: string; itemName: string } | null>(null);
   const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
   const [editingPriceItemId, setEditingPriceItemId] = useState<string | null>(null);
   const [newPriceInput, setNewPriceInput] = useState<string>('');
@@ -65,15 +73,46 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
 
   const handleToggle = async (item: ShoppingItem) => {
     const willBeBought = !item.is_bought;
-    await onToggleBought(item.id);
 
-    // Si se acaba de comprar, ofrecer agregar a la despensa
     if (willBeBought) {
-      setItemJustBought(item);
-      // Auto-ocultar notificación a los 6 segundos
-      setTimeout(() => {
-        setItemJustBought((curr) => (curr?.id === item.id ? null : curr));
-      }, 6000);
+      // 1. Evaluar política del hogar
+      const action = evaluatePantryAddAction(item, household);
+
+      if (action === 'auto') {
+        // Modo automático: sumar a la despensa inmediatamente
+        if (onAutoAddToPantry) {
+          await onAutoAddToPantry(item);
+        }
+        // Mostrar aviso discreto con botón "Deshacer"
+        setAutoAddedToast({ shoppingItemId: item.id, itemName: item.name });
+        setTimeout(() => {
+          setAutoAddedToast((curr) => (curr?.shoppingItemId === item.id ? null : curr));
+        }, 6000);
+      } else if (action === 'ask') {
+        // Modo preguntar: mostrar diálogo de confirmación
+        setItemJustBought(item);
+        setTimeout(() => {
+          setItemJustBought((curr) => (curr?.id === item.id ? null : curr));
+        }, 8000);
+      }
+      // Si action === 'skip' (limpieza o 'never'), no se hace nada respecto a la despensa
+
+      await onToggleBought(item.id);
+    } else {
+      // El ítem vuelve a "falta comprar" (desmarcado):
+      // Si se había sumado a la despensa, se revierte/resta automáticamente
+      if (onRevertPantry) {
+        await onRevertPantry(item.id);
+      }
+      // Ocultar toasts asociados si estaban abiertos
+      if (autoAddedToast?.shoppingItemId === item.id) {
+        setAutoAddedToast(null);
+      }
+      if (itemJustBought?.id === item.id) {
+        setItemJustBought(null);
+      }
+
+      await onToggleBought(item.id);
     }
   };
 
@@ -299,33 +338,72 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
         })}
       </div>
 
-      {/* Notificación flotante: ¿Sumar a la despensa? */}
+      {/* Notificación flotante: ¿Sumar a la despensa? (Modo Preguntar) */}
       {itemJustBought && (
-        <div className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-40 bg-slate-900 text-white dark:bg-slate-800 dark:text-white p-3.5 rounded-2xl shadow-xl border border-slate-700 animate-slide-up flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Archive className="w-5 h-5 text-chef-400 flex-shrink-0" />
-            <div className="text-xs">
-              <p className="font-bold truncate">¿Sumar "{itemJustBought.name}" a la despensa?</p>
-              <p className="text-slate-400">Para que el Chef sepa que ya lo tenés en casa.</p>
+        <div className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-40 bg-slate-900 text-white dark:bg-slate-800 dark:text-white p-3.5 rounded-2xl shadow-xl border border-slate-700 animate-slide-up flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Archive className="w-5 h-5 text-chef-400 flex-shrink-0" />
+              <div className="text-xs min-w-0">
+                <p className="font-bold truncate">¿Sumar "{itemJustBought.name}" a la despensa?</p>
+                <p className="text-slate-400 text-[11px]">Para que el Chef sepa que ya lo tenés en casa.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => {
+                  onAddToPantryPrompt(itemJustBought, false);
+                  setItemJustBought(null);
+                }}
+                className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors"
+              >
+                Sí, sumar
+              </button>
+              <button
+                onClick={() => setItemJustBought(null)}
+                className="px-2 py-1.5 text-slate-400 hover:text-white text-xs font-medium"
+              >
+                No
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="pt-2 border-t border-slate-800 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
+            <span>¿Querés que se sumen solos?</span>
             <button
               onClick={() => {
-                onAddToPantryPrompt(itemJustBought);
+                onAddToPantryPrompt(itemJustBought, true);
                 setItemJustBought(null);
               }}
-              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors"
+              className="text-chef-400 hover:text-chef-300 font-semibold underline text-[11px]"
             >
-              Sí, sumar
-            </button>
-            <button
-              onClick={() => setItemJustBought(null)}
-              className="px-2 py-1.5 text-slate-400 hover:text-white text-xs font-medium"
-            >
-              No
+              Sumar siempre (no volver a preguntar)
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Toast discreto: Agregado a la despensa (Modo Automático con Deshacer) */}
+      {autoAddedToast && (
+        <div className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-40 bg-slate-900/95 text-white dark:bg-slate-800/95 backdrop-blur-md p-3.5 rounded-2xl shadow-xl border border-slate-700 animate-slide-up flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <div className="text-xs min-w-0">
+              <p className="font-semibold truncate">Agregado a la despensa</p>
+              <p className="text-slate-400 text-[11px] truncate">"{autoAddedToast.itemName}" ya está en tu despensa</p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              if (onRevertPantry) {
+                await onRevertPantry(autoAddedToast.shoppingItemId);
+              }
+              setAutoAddedToast(null);
+            }}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border border-slate-700 flex-shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Deshacer</span>
+          </button>
         </div>
       )}
 

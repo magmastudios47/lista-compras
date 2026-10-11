@@ -59,6 +59,16 @@ export const offlineStorage = {
     setStorageItem(STORAGE_KEYS.LOCAL_PANTRY, JSON.stringify(items));
   },
 
+  // Pantry Origins (tracking de ítems de compra sumados a despensa)
+  getPantryOrigins(): Record<string, any> {
+    const data = getStorageItem(STORAGE_KEYS.PANTRY_ORIGINS);
+    return data ? JSON.parse(data) : {};
+  },
+
+  savePantryOrigins(origins: Record<string, any>): void {
+    setStorageItem(STORAGE_KEYS.PANTRY_ORIGINS, JSON.stringify(origins));
+  },
+
   // Mutation Queue para sincronización offline
   getMutationQueue(): QueuedMutation[] {
     const data = getStorageItem(STORAGE_KEYS.MUTATION_QUEUE);

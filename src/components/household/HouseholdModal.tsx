@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useAuth } from '../../context/AuthContext';
-import { Users, Plus, KeyRound, Share2, Shield, X, Check, Copy } from 'lucide-react';
+import { Users, Plus, KeyRound, Share2, Shield, X, Check, Copy, Archive } from 'lucide-react';
 
 interface HouseholdModalProps {
   isOpen: boolean;
@@ -14,7 +14,7 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
   onClose,
   onOpenInstallGuide,
 }) => {
-  const { household, members, createHousehold, joinHouseholdByCode, getWhatsAppInviteUrl } = useHousehold();
+  const { household, members, createHousehold, joinHouseholdByCode, getWhatsAppInviteUrl, updateHouseholdSettings } = useHousehold();
   const { user, signOut } = useAuth();
   const [newHhName, setNewHhName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -130,6 +130,62 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Ajuste del hogar: Al marcar como comprado */}
+        <div className="mt-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-3">
+          <div className="flex items-center gap-2">
+            <Archive className="w-4 h-4 text-chef-500" />
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Al marcar producto como comprado:
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5 text-center">
+            <button
+              type="button"
+              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'ask' })}
+              className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
+                (household?.pantry_add_mode || 'ask') === 'ask'
+                  ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              Preguntar
+            </button>
+            <button
+              type="button"
+              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'auto' })}
+              className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
+                household?.pantry_add_mode === 'auto'
+                  ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              Sumar auto
+            </button>
+            <button
+              type="button"
+              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'never' })}
+              className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
+                household?.pantry_add_mode === 'never'
+                  ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              No sumar
+            </button>
+          </div>
+
+          <label className="flex items-center gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={household?.pantry_exclude_cleaning !== false}
+              onChange={(e) => updateHouseholdSettings({ pantry_exclude_cleaning: e.target.checked })}
+              className="rounded text-patagonia-600 focus:ring-patagonia-500 w-4 h-4"
+            />
+            <span>No sumar productos de limpieza</span>
+          </label>
         </div>
 
         {/* Unirse a otro hogar con código */}

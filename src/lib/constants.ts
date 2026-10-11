@@ -39,6 +39,7 @@ export const STORAGE_KEYS = {
   ONBOARDING_SEEN: 'compars_onboarding_seen',
   USAGE_QUOTA: 'compars_usage_quota',
   WEEKLY_MENU: 'compars_weekly_menu',
+  PANTRY_ORIGINS: 'compars_pantry_origins',
 };
 
 export const MAX_CHEF_MONTHLY_FREE = 40;

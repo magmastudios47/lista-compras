@@ -39,6 +39,8 @@ export const MOCK_HOUSEHOLD = {
   currency: 'ARS',
   monthly_chef_limit: 40,
   chef_queries_used_month: 3,
+  pantry_add_mode: 'ask' as const,
+  pantry_exclude_cleaning: true,
   created_at: new Date().toISOString(),
 };
 

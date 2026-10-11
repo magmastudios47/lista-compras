@@ -24,6 +24,7 @@ interface HouseholdContextType {
   getWhatsAppInviteUrl: () => string;
   incrementChefUsage: () => void;
   refreshLicense: () => Promise<void>;
+  updateHouseholdSettings: (settings: Partial<Household>) => Promise<Household>;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
@@ -219,6 +220,34 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [household?.id, isDemoMode]);
 
+  // Suscripción Realtime a cambios en la tabla households (para sincronizar ajustes como pantry_add_mode entre integrantes)
+  useEffect(() => {
+    if (!household || !isConfigured || isDemoMode) return;
+
+    const hhChannel = supabase
+      .channel(`household_settings_${household.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'households', filter: `id=eq.${household.id}` },
+        (payload) => {
+          if (payload.new) {
+            const updatedHh = payload.new as Household;
+            setHousehold((prev) => {
+              if (!prev) return updatedHh;
+              const merged = { ...prev, ...updatedHh };
+              localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(merged));
+              return merged;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(hhChannel);
+    };
+  }, [household?.id, isDemoMode]);
+
   // Verificar código de invitación en la URL (?join=CODE)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -378,6 +407,47 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const remainingQueries = Math.max(0, effectiveLimit - chefUsedThisMonth);
   const isPremium = currentPlan === 'premium';
 
+  const updateHouseholdSettings = useCallback(
+    async (settings: Partial<Household>): Promise<Household> => {
+      const current = household || MOCK_HOUSEHOLD;
+      const updated: Household = {
+        ...current,
+        ...settings,
+        updated_at: new Date().toISOString(),
+      };
+
+      setHousehold(updated);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(updated));
+
+      if (!isDemoMode && isConfigured) {
+        try {
+          const updatePayload: Record<string, any> = {
+            updated_at: updated.updated_at,
+          };
+          if (settings.pantry_add_mode !== undefined) {
+            updatePayload.pantry_add_mode = settings.pantry_add_mode;
+          }
+          if (settings.pantry_exclude_cleaning !== undefined) {
+            updatePayload.pantry_exclude_cleaning = settings.pantry_exclude_cleaning;
+          }
+          if (settings.name !== undefined) {
+            updatePayload.name = settings.name;
+          }
+
+          await supabase
+            .from('households')
+            .update(updatePayload)
+            .eq('id', current.id);
+        } catch (err) {
+          console.warn('Error sincronizando ajustes del hogar en Supabase:', err);
+        }
+      }
+
+      return updated;
+    },
+    [household, isDemoMode]
+  );
+
   return (
     <HouseholdContext.Provider
       value={{
@@ -392,6 +462,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         getWhatsAppInviteUrl,
         incrementChefUsage,
         refreshLicense,
+        updateHouseholdSettings,
       }}
     >
       {children}

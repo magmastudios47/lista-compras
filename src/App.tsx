@@ -18,6 +18,7 @@ import { useHousehold } from './context/HouseholdContext';
 import { useOfflineSync } from './context/OfflineSyncContext';
 import { STORAGE_KEYS } from './lib/constants';
 import { ShoppingItem } from './types';
+import { pantrySyncManager } from './lib/pantryAutoSync';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('lista');
@@ -34,7 +35,7 @@ export const App: React.FC = () => {
   const [isMpModalOpen, setIsMpModalOpen] = useState(false);
 
   const { isOnline } = useOfflineSync();
-  const { household, remainingQueries } = useHousehold();
+  const { household, remainingQueries, updateHouseholdSettings } = useHousehold();
 
   const {
     items,
@@ -59,6 +60,7 @@ export const App: React.FC = () => {
     addPantryItem,
     updatePantryItem,
     deletePantryItem,
+    revertPantryAddition,
     clearAllPantry,
     undoClearPantry,
     commitClearPantryNow,
@@ -84,9 +86,33 @@ export const App: React.FC = () => {
     setActiveTab('lista');
   };
 
-  // Oferta de sumar producto comprado a la despensa
-  const handlePromptAddToPantry = async (item: ShoppingItem) => {
-    await addPantryItem(item.name, item.quantity, item.unit, item.category);
+  // Auto-agregar a la despensa registrando procedencia de forma idempotente
+  const handleAutoAddToPantry = async (item: ShoppingItem) => {
+    if (pantrySyncManager.hasRecord(item.id)) return;
+
+    const pantryItem = await addPantryItem(item.name, item.quantity, item.unit, item.category);
+    pantrySyncManager.recordAddition({
+      shoppingItemId: item.id,
+      pantryItemId: pantryItem.id,
+      pantryItemName: pantryItem.name,
+      normalizedName: pantryItem.normalized_name,
+      quantityAdded: item.quantity,
+      unit: item.unit,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // Revertir adición a la despensa originada por este ítem
+  const handleRevertPantry = async (shoppingItemId: string): Promise<boolean> => {
+    return await revertPantryAddition(shoppingItemId);
+  };
+
+  // Oferta manual de sumar producto comprado a la despensa (con opción de activar auto)
+  const handlePromptAddToPantry = async (item: ShoppingItem, setAutoAlways: boolean = false) => {
+    if (setAutoAlways) {
+      await updateHouseholdSettings({ pantry_add_mode: 'auto' });
+    }
+    await handleAutoAddToPantry(item);
   };
 
   // Interpretar texto libre de despensa con IA
@@ -140,6 +166,8 @@ export const App: React.FC = () => {
             onUndoClear={undoClearShopping}
             onCommitClearNow={commitClearShoppingNow}
             onAddToPantryPrompt={handlePromptAddToPantry}
+            onAutoAddToPantry={handleAutoAddToPantry}
+            onRevertPantry={handleRevertPantry}
             onOpenChefModal={handleOpenChef}
           />
         )}
@@ -181,7 +209,12 @@ export const App: React.FC = () => {
                 onClick={() => setIsHouseholdModalOpen(true)}
                 className="w-full py-3 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-between transition-colors"
               >
-                <span>Configuración de Integrantes y Código</span>
+                <div className="text-left">
+                  <span>⚙️ Configuración del Hogar y Despensa</span>
+                  <span className="block text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                    Al comprar: {(household?.pantry_add_mode || 'ask') === 'ask' ? 'Preguntar' : (household?.pantry_add_mode === 'auto' ? 'Sumar automático' : 'No sumar')}
+                  </span>
+                </div>
                 <span>→</span>
               </button>
 
