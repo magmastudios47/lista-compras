@@ -1,0 +1,44 @@
+name: Actualización Diaria de Precios SEPA
+
+on:
+  schedule:
+    # Lunes a viernes a las 07:00 AM hora Argentina (10:00 UTC)
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch: # Permite ejecución manual desde GitHub
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar importador SEPA
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run import-sepa
+
+      - name: Verificar cambios
+        id: git-check
+        run: |
+          git status --porcelain data/reference_prices.json
+          echo "has_changes=$(git status --porcelain data/reference_prices.json | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: Commit y push de precios actualizados
+        if: steps.git-check.outputs.has_changes > 0
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action SEPA Importer"
+          git add data/reference_prices.json
+          git commit -m "chore(precios): actualización diaria de precios SEPA [skip ci]"
+          git push

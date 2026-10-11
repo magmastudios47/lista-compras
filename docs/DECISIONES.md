@@ -185,4 +185,24 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
      - Al desmarcar un ítem (volver a "falta comprar") o al presionar "Deshacer" en el toast discreto de 6 segundos, se resta con precisión la cantidad sumada (`calculateRevertedPantryItem`), garantizando que la despensa nunca quede con valores negativos (`Math.max(0, ...)`).
      - La verificación de registro previo previene sumas duplicadas si dos integrantes marcan ítems simultáneamente.
 
+---
+
+### Decisión 19: Ronda 4 Bloque 4 - Precios de Referencia Oficiales SEPA / Precios Claros con Precedencia Híbrida
+- **Contexto**: Los usuarios no querían cargar los precios uno por uno a mano. Existe el dataset oficial diario del SEPA (Secretaría de Comercio), pero carece de API pública individual y pesa varios gigabytes al descomprimirse a nivel nacional.
+- **Decisión**:
+  1. **Fuentes Oficiales y No Scraping**:
+     - Se utilizan exclusivamente fuentes de Datos Abiertos oficiales (`datos.produccion.gob.ar` / `preciosclaros.gob.ar`) bajo licencia Creative Commons CC-BY 4.0. Se prohíbe taxativamente el scraping o el uso de endpoints no documentados de cadenas privadas.
+  2. **Importador Batch Desacoplado (`scripts/importSepaPrices.ts`)**:
+     - Funciona fuera de Edge Functions para evitar timeouts y costos de procesamiento. Puede ejecutarse localmente con `npm run import-sepa` o programarse gratuitamente mediante GitHub Actions (`.github/workflows/update-sepa-prices.yml`).
+     - Filtra por sucursales cordilleranas de Neuquén: Junín de los Andes (La Anónima 063) y San Martín de los Andes (La Anónima 023 y 138).
+     - Convierte la presentación a unidad de medida base ($/kg, $/l, $/unidad).
+     - Aplica cálculo de mediana descartando valores atípicos (outliers que superen 3x la mediana o estén debajo de 0.25x).
+  3. **Honestidad de Datos y Seguridad**:
+     - Los productos envasados se etiquetan con confianza alta/media según cantidad de muestras. Frescos (carnicería/verdulería) se etiquetan con confianza baja o sin dato. Nunca se inventan precios ni se usan modelos de lenguaje para alucinar valores.
+     - Tabla `price_reference` en Supabase con RLS: lectura para usuarios de la app, escritura solo para el rol de servicio.
+  4. **Precedencia Estricta en la App**:
+     - `1. Precio del Hogar` > `2. Precio de Referencia SEPA` > `3. Sin Precio`.
+     - El presupuesto del carrito muestra total aproximado, conteo de ítems sin precio y la atribución legal obligatoria: *"Fuente: SEPA / Precios Claros (Secretaría de Comercio)"*.
+
+
 

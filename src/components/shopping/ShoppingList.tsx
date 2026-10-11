@@ -6,6 +6,7 @@ import { AddItemDrawer } from './AddItemDrawer';
 import { saveHouseholdPrice } from '../../lib/priceMemory';
 import { useHousehold } from '../../context/HouseholdContext';
 import { evaluatePantryAddAction } from '../../lib/pantryAutoSync';
+import { calculateCartBudget, getEffectiveItemPrice, SEPA_ATTRIBUTION } from '../../lib/priceEngine';
 
 interface ShoppingListProps {
   items: ShoppingItem[];
@@ -68,8 +69,8 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
     return acc;
   }, {} as Record<Category, ShoppingItem[]>);
 
-  // Total de presupuesto estimado
-  const totalEstimated = pendingItems.reduce((sum, item) => sum + (item.estimated_price || 0), 0);
+  // Presupuesto calculado con precedencia: Hogar > SEPA > Sin precio
+  const budgetSummary = calculateCartBudget(pendingItems, household?.id);
 
   const handleToggle = async (item: ShoppingItem) => {
     const willBeBought = !item.is_bought;
@@ -120,16 +121,24 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
     <div className="pb-28 pt-2 px-4 max-w-md mx-auto">
       {/* Barra de utilidades: Presupuesto y Menú protegido de acciones */}
       <div className="mb-3 flex items-center justify-between gap-2">
-        {totalEstimated > 0 ? (
-          <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center gap-2 text-xs">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto estimado:</span>
-            <span className="font-bold text-slate-800 dark:text-slate-200">
-              ${totalEstimated.toLocaleString('es-AR')} aprox.
-            </span>
+        {budgetSummary.hasPrices ? (
+          <div className="flex-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Presupuesto aprox.:</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-200">
+                {budgetSummary.formattedTotal}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-1 text-[10px] text-slate-400 pt-0.5 border-t border-slate-200/60 dark:border-slate-700/40 mt-1">
+              <span>{budgetSummary.unpricedCount > 0 ? `${budgetSummary.unpricedCount} sin precio` : 'Todos con precio'}</span>
+              <span title={budgetSummary.attribution} className="truncate max-w-[170px]">
+                {budgetSummary.attribution}
+              </span>
+            </div>
           </div>
         ) : (
           <div className="text-xs text-slate-400 font-medium">
-            {pendingItems.length} {pendingItems.length === 1 ? 'producto pendiente' : 'productos pendientes'}
+            {pendingItems.length} {pendingItems.length === 1 ? 'producto pendiente' : 'productos pendientes'} (sin precios cargados)
           </div>
         )}
 
@@ -291,31 +300,47 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
                             </div>
                           ) : (
                             <>
-                              {item.estimated_price ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingPriceItemId(item.id);
-                                    setNewPriceInput(String(item.estimated_price));
-                                  }}
-                                  className="text-slate-600 dark:text-slate-300 font-semibold hover:underline"
-                                  title="Editar precio"
-                                >
-                                  • ${item.estimated_price}
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingPriceItemId(item.id);
-                                    setNewPriceInput('');
-                                  }}
-                                  className="text-[10px] text-slate-400 hover:text-patagonia-600 flex items-center gap-0.5"
-                                  title="Cargar precio"
-                                >
-                                  • <Tag className="w-2.5 h-2.5" /> +Precio
-                                </button>
-                              )}
+                              {(() => {
+                                const effPrice =
+                                  item.estimated_price !== undefined && item.estimated_price !== null && item.estimated_price > 0
+                                    ? { price: item.estimated_price, source: 'manual' as const }
+                                    : getEffectiveItemPrice(item.name, item.quantity, item.unit, item.household_id || household?.id);
+
+                                if (effPrice.price !== null && effPrice.price > 0) {
+                                  const label =
+                                    effPrice.source === 'manual' ? 'manual' : effPrice.source === 'household' ? 'hogar' : 'SEPA';
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingPriceItemId(item.id);
+                                        setNewPriceInput(String(effPrice.price));
+                                      }}
+                                      className="text-slate-600 dark:text-slate-300 font-semibold hover:underline flex items-center gap-1 text-xs"
+                                      title={`Precio de referencia (${label}): $${effPrice.price}. Tocá para cambiar.`}
+                                    >
+                                      <span>• ${effPrice.price}</span>
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-normal">
+                                        {label}
+                                      </span>
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingPriceItemId(item.id);
+                                      setNewPriceInput('');
+                                    }}
+                                    className="text-[10px] text-slate-400 hover:text-patagonia-600 flex items-center gap-0.5"
+                                    title="Cargar precio"
+                                  >
+                                    • <Tag className="w-2.5 h-2.5" /> +Precio
+                                  </button>
+                                );
+                              })()}
                             </>
                           )}
                         </div>

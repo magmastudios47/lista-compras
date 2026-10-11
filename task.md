@@ -120,13 +120,13 @@
   - [x] Exclusión configurable de productos de limpieza
   - [x] Operación idempotente y soporte offline sin duplicar
   - [x] Pruebas unitarias y de integración de los tres modos, reversión y concurrencia
-- [ ] **Bloque 4: Precios Automáticos (SEPA / Precios Claros)**
-  - [ ] Verificación de fuentes oficiales abiertas SEPA / Precios Claros y documentación de cobertura en Junín de los Andes / Neuquén
-  - [ ] Script importador batch local / tarea periódica con cálculo de mediana descartando valores atípicos
-  - [ ] Tabla `price_reference` en Supabase con RLS (lectura miembros, escritura servicio)
-  - [ ] Precedencia de precios en la app: Hogar > SEPA > Sin precio
-  - [ ] Total con "aprox.", conteo de ítems sin precio, fecha de actualización y atribución oficial obligatoria
-  - [ ] Pruebas con archivo de muestra de SEPA
+- [x] **Bloque 4: Precios Automáticos (SEPA / Precios Claros)**
+  - [x] Verificación de fuentes oficiales abiertas SEPA / Precios Claros y documentación de cobertura en Junín de los Andes / Neuquén
+  - [x] Script importador batch local / tarea periódica con cálculo de mediana descartando valores atípicos
+  - [x] Tabla `price_reference` en Supabase con RLS (lectura miembros, escritura servicio)
+  - [x] Precedencia de precios en la app: Hogar > SEPA > Sin precio
+  - [x] Total con "aprox.", conteo de ítems sin precio, fecha de actualización y atribución oficial obligatoria
+  - [x] Pruebas con archivo de muestra de SEPA
 - [ ] **Bloque 5: Revisión Final (QA) y Cierre**
   - [ ] Recorrido manual y automatizado en viewport de celular (390x844) y escritorio
   - [ ] Chequeo exhaustivo de consola y red

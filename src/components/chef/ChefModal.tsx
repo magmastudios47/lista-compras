@@ -323,11 +323,18 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                     household?.id
                   );
                   return (
-                    <div className="mt-2 pt-2 border-t border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between text-xs">
-                      <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
-                      <span className="font-bold text-amber-950 dark:text-amber-100">
-                        {est.formattedEstimate}
-                      </span>
+                    <div className="mt-2 pt-2 border-t border-amber-200/60 dark:border-amber-900/40 flex flex-col gap-0.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
+                        <span className="font-bold text-amber-950 dark:text-amber-100">
+                          {est.formattedEstimate}
+                        </span>
+                      </div>
+                      {est.coveredCount > 0 && est.attribution && (
+                        <span className="text-[10px] text-amber-700/70 dark:text-amber-400/60 text-right">
+                          {est.attribution}
+                        </span>
+                      )}
                     </div>
                   );
                 })()}
@@ -565,11 +572,18 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                   household?.id
                 );
                 return (
-                  <div className="mt-2 pt-1.5 border-t border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between text-xs">
-                    <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
-                    <span className="font-bold text-amber-950 dark:text-amber-100">
-                      {est.formattedEstimate}
-                    </span>
+                  <div className="mt-2 pt-1.5 border-t border-amber-200/60 dark:border-amber-900/40 flex flex-col gap-0.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-800 dark:text-amber-300 font-medium">Costo estimado:</span>
+                      <span className="font-bold text-amber-950 dark:text-amber-100">
+                        {est.formattedEstimate}
+                      </span>
+                    </div>
+                    {est.coveredCount > 0 && est.attribution && (
+                      <span className="text-[10px] text-amber-700/70 dark:text-amber-400/60 text-right">
+                        {est.attribution}
+                      </span>
+                    )}
                   </div>
                 );
               })()}

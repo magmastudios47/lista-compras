@@ -1,0 +1,6 @@
+id_comercio,id_bandera,id_sucursal,nombre,direccion,localidad,provincia,latitud,longitud
+10,1,063,La Anonima Sucursal 063,Cnel Suarez 300,Junin de los Andes,Neuquen,-39.9502,-71.0694
+10,1,023,La Anonima Sucursal 023,Av San Martin 657,San Martin de los Andes,Neuquen,-40.1578,-71.3541
+10,1,138,La Anonima Sucursal 138,Perito Moreno 1100,San Martin de los Andes,Neuquen,-40.1622,-71.3489
+10,1,012,La Anonima Zapala,Av San Martin 400,Zapala,Neuquen,-38.9022,-70.0652
+20,2,001,Carrefour Neuquen,Gdor Anaya 100,Neuquen,Neuquen,-38.9516,-68.0591

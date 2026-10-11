@@ -1,0 +1,142 @@
+[
+  {
+    "normalized_name": "aceite",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 2150,
+    "unit": "l",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 2,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "arroz",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 2100,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 3,
+    "confidence": "alta"
+  },
+  {
+    "normalized_name": "azucar",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 1050,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "carne picada",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 6500,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "baja"
+  },
+  {
+    "normalized_name": "cebolla",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 820,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "baja"
+  },
+  {
+    "normalized_name": "fideos",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 2240,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 3,
+    "confidence": "alta"
+  },
+  {
+    "normalized_name": "harina",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 950,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 2,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "huevos",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 300,
+    "unit": "unidad",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "leche",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 1455,
+    "unit": "l",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 6,
+    "confidence": "alta"
+  },
+  {
+    "normalized_name": "manteca",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 10375,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 2,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "nalga",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 8900,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "baja"
+  },
+  {
+    "normalized_name": "papa",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 950,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 1,
+    "confidence": "baja"
+  },
+  {
+    "normalized_name": "pure de tomate",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 1701.92,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 2,
+    "confidence": "media"
+  },
+  {
+    "normalized_name": "yerba",
+    "zone": "Junín de los Andes y alrededores",
+    "price_per_unit": 4400,
+    "unit": "kg",
+    "date": "2026-10-11",
+    "source": "SEPA",
+    "sample_count": 2,
+    "confidence": "media"
+  }
+]

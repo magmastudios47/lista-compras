@@ -81,64 +81,23 @@ export function clearPriceMemory(householdId?: string): void {
   }
 }
 
+import { calculateRecipeCost, SEPA_ATTRIBUTION } from './priceEngine';
+
 export interface RecipeCostEstimate {
   totalEstimated: number;
   coveredCount: number;
   missingCount: number;
   isFullyPriced: boolean;
   formattedEstimate: string;
+  attribution?: string;
 }
 
 /**
- * Calcula el costo estimado de una receta según los precios recordados por el hogar
+ * Calcula el costo estimado de una receta según precedencia: Hogar > SEPA > Sin precio
  */
 export function calculateRecipeEstimatedCost(
   ingredients: ChefIngredient[],
   householdId: string = 'default'
 ): RecipeCostEstimate {
-  if (!ingredients || ingredients.length === 0) {
-    return {
-      totalEstimated: 0,
-      coveredCount: 0,
-      missingCount: 0,
-      isFullyPriced: false,
-      formattedEstimate: 'Sin ingredientes',
-    };
-  }
-
-  let total = 0;
-  let covered = 0;
-  let missing = 0;
-
-  ingredients.forEach((ing) => {
-    // Si es opcional, no cuenta para el cálculo obligatorio
-    if (ing.opcional) return;
-
-    const price = getHouseholdPrice(ing.nombre, householdId);
-    if (price !== null && price > 0) {
-      total += price;
-      covered++;
-    } else {
-      missing++;
-    }
-  });
-
-  const isFullyPriced = missing === 0 && covered > 0;
-  let formattedEstimate: string;
-
-  if (isFullyPriced) {
-    formattedEstimate = `$${Math.round(total).toLocaleString('es-AR')} aprox.`;
-  } else if (covered > 0) {
-    formattedEstimate = `Faltan precios de ${missing} ${missing === 1 ? 'ingrediente' : 'ingredientes'}`;
-  } else {
-    formattedEstimate = `Sin precios cargados (${missing} faltantes)`;
-  }
-
-  return {
-    totalEstimated: Math.round(total * 100) / 100,
-    coveredCount: covered,
-    missingCount: missing,
-    isFullyPriced,
-    formattedEstimate,
-  };
+  return calculateRecipeCost(ingredients, householdId);
 }
