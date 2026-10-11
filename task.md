@@ -127,9 +127,9 @@
   - [x] Precedencia de precios en la app: Hogar > SEPA > Sin precio
   - [x] Total con "aprox.", conteo de ítems sin precio, fecha de actualización y atribución oficial obligatoria
   - [x] Pruebas con archivo de muestra de SEPA
-- [ ] **Bloque 5: Revisión Final (QA) y Cierre**
-  - [ ] Recorrido manual y automatizado en viewport de celular (390x844) y escritorio
-  - [ ] Chequeo exhaustivo de consola y red
-  - [ ] Documentos `docs/QA-REPORT-R4.md` y `docs/RONDA4.md`
-  - [ ] Actualización final de `SKILL.md`, `SETUP.md` y `task.md`
+- [x] **Bloque 5: Revisión Final (QA) y Cierre**
+  - [x] Recorrido manual y automatizado en viewport de celular (390x844) y escritorio
+  - [x] Chequeo exhaustivo de consola y red
+  - [x] Documentos `docs/QA-REPORT-R4.md` y `docs/RONDA4.md`
+  - [x] Actualización final de `SKILL.md`, `SETUP.md` y `task.md`
 

@@ -217,38 +217,56 @@ export const InterpretedItemSchema = z.object({
   confianza: z.enum(['alta', 'media', 'baja']).default('alta'),
 });
 
-export const MenuMealSchema = z.object({
+export const PlanificarSemanaMealSchema = z.object({
+  dia: z.string(),
   tipo: z.enum(['desayuno', 'almuerzo', 'merienda', 'cena']),
-  nombre: z.string(),
-  porciones: z.number(),
-  tiempo_minutos: z.number().optional(),
-  por_que_encaja: z.string().optional(),
-  analisis_plato: z.array(z.string()).default([]),
-  ingredientes: z.array(IngredientSchema).default([]),
+  plato: z.string().min(1),
+  bebida: z.string().nullable().optional(),
+  por_que_encaja: z.string().default(''),
 });
 
-export const MenuResponseSchema = z.object({
-  modo: z.literal('menu'),
+export const PlanificarSemanaResponseSchema = z.object({
+  modo: z.literal('planificar_semana'),
   fuera_de_tema: z.boolean(),
   mensaje: z.string().nullable(),
   aclaracion: z.string().nullable(),
-  dias: z.array(
-    z.object({
-      dia: z.string(),
-      comidas: z.array(MenuMealSchema),
-    })
-  ).default([]),
+  comidas: z.array(PlanificarSemanaMealSchema).default([]),
   advertencias: z.array(z.string()).default([]),
+});
+
+export const DetalleDiaMenuResponseSchema = z.object({
+  modo: z.literal('detalle_dia_menu'),
+  dia: z.string(),
+  comidas: z.array(
+    z.object({
+      tipo: z.enum(['desayuno', 'almuerzo', 'merienda', 'cena']),
+      plato: z.string(),
+      bebida: z.string().nullable().optional(),
+      receta: z.object({
+        porciones: z.number().default(4),
+        tiempo_minutos: z.number().optional(),
+        dificultad: z.enum(['facil', 'media', 'dificil']).default('media'),
+        pasos: z.array(z.string()).min(1).max(8),
+      }).nullable().optional(),
+      ingredientes: z.array(IngredientSchema).default([]),
+    })
+  ),
 });
 ```
 
 ---
 
-## 3. Cuotas y Límites de Consultas
+## 3. Validación Silenciosa del Servidor (32 Platos Clásicos)
+
+`src/lib/culinarySanityCheck.ts` y `supabase/functions/_shared/culinarySanity.ts` contienen reglas de descarte silencioso para 32 preparaciones argentinas (arroz/fideos en pastel de papas, papa en puré de zapallo, arroz en milanesa napolitana, carne en tarta de jamón y queso, etc.). Nunca se muestran al usuario ni se le inyectan a la IA: operan en servidor/cliente eliminando alucinaciones evidentes y marcando `opcional: true` los ingredientes no mencionados en los pasos.
+
+---
+
+## 4. Cuotas y Límites de Consultas
 
 | Modo | Cuota Mensual | Comportamiento de Límite |
 | :--- | :--- | :--- |
 | `cocinar` | Compartida (Free 5, Base 40, Premium 150) | Cuenta 1 consulta por invocación |
 | `sugerir` | Compartida (Free 5, Base 40, Premium 150) | Cuenta 1 consulta por invocación |
-| `menu` | Exclusivo Premium (150) | Cuenta 3 consultas por menú generado completo |
+| `planificar_semana` + `detalle_dia_menu` | Exclusivo Premium (150) | Flujo en 2 pasos: 1 llamada global + hasta 7 llamadas diarias (8 llamadas totales a IA), computa como **3 consultas** de usuario |
 | `interpretar_items` | Cuota independiente (200 consultas/mes) | No resta cuota del Chef de cocina; cuenta con caché global |

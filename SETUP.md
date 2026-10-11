@@ -29,16 +29,18 @@ Supabase guarda los productos de tu lista y sincroniza los cambios en tiempo rea
 4. Cuando el proyecto termine de crearse (tarda 1 minuto):
    - En el menú lateral izquierdo, tocá el ícono de **SQL Editor** (parece una hoja con código).
    - Tocá **"New Query"**.
-   - Abrí el archivo de este proyecto ubicado en:  
-     `supabase/migrations/20261007_init.sql`
-   - Copiá todo el texto y pegalo en el editor de Supabase.
-   - Tocá el botón verde **"Run"** (abajo a la derecha). Esto creará todas las tablas y reglas de seguridad automáticamente.
+   - Ejecutá las migraciones en este orden:
+     1. `supabase/migrations/20261007_init.sql` (tablas iniciales y RLS)
+     2. `supabase/migrations/20261008_billing_and_payments.sql` (pagos y Mercado Pago)
+     3. `supabase/migrations/20261009_soft_delete.sql` (vaciado con deshacer)
+     4. `supabase/migrations/20261011_ronda4_settings_and_prices.sql` (despensa auto y tabla price_reference)
+   - Tocá el botón verde **"Run"** para cada una.
 5. Obtené tus claves:
    - Andá al ícono de engranaje **Project Settings** (abajo a la izquierda) -> **API**.
    - Copiá:
      - **Project URL**
      - **anon / public key**
-     - **service_role key** (esta es secreta, solo para el servidor).
+     - **service_role key** (esta es secreta, solo para el servidor e importador de precios).
 6. En la carpeta de tu proyecto, creá un archivo llamado `.env` (copiando el contenido de `.env.example`) y pegá tus valores:
    ```env
    VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
@@ -58,8 +60,10 @@ Gemini es la inteligencia artificial que le da vida al Chef. Durante la etapa be
 4. Copiá la clave generada y pegala en tu archivo `.env`:
    ```env
    GEMINI_API_KEY=AIzaSy...tu_clave_aqui
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL_CHEF=gemini-2.5-flash
+   GEMINI_MODEL_FAST=gemini-2.0-flash-lite
    ```
+   *(Nota: `GEMINI_MODEL_CHEF` se usa para recetas, sugerencias y menú semanal con pensamiento/razonamiento leve; `GEMINI_MODEL_FAST` se usa para segmentar texto libre y corregir ortografía).*
    *(Nota: Cuando más adelante decidas pasar al nivel pago de Gemini, solo tenés que activar la facturación en tu cuenta de Google Cloud y mantener esta misma clave, sin modificar una sola línea de código).*
 
 ---
@@ -180,6 +184,35 @@ Para verificar cómo interactúan dos personas de la misma casa en tiempo real d
    - **Tachar en el súper:** En la ventana de Lucía, tocá el círculo para marcarlo comprado. En la ventana de Facundo se tachará en tiempo real y sonará el efecto.
    - **Vaciar y Deshacer:** En cualquiera de las dos ventanas, tocá "Vaciar comprados". Desaparecerán de ambas pantallas y aparecerá la barra verde de *"Deshacer (10s)"*. Tocá "Deshacer" y volverán a estar presentes de inmediato.
    - **Aislamiento entre familias:** Si abrís un tercer navegador con otro hogar distinto, podés comprobar que no ve absolutamente nada de la lista, despensa ni licencias del Hogar Pehuenes.
+
+---
+
+## Paso 8: Importar Precios Oficiales SEPA / Precios Claros (Ronda 4)
+
+Para que la lista calcule el presupuesto aproximado en pesos y las recetas estimen su costo según los precios vigentes en **Junín de los Andes y San Martín de los Andes**:
+
+1. En tu terminal ejecutá:
+   ```bash
+   npm run import-sepa
+   ```
+2. El script procesará los archivos oficiales de Precios Claros, filtrará las sucursales de La Anónima de la zona, descartará valores atípicos y generará `data/reference_prices.json`.
+3. En la app verás automáticamente el total con la leyenda *"aprox."*, el conteo de ítems sin precio y la atribución reglamentaria: *"Fuente: SEPA / Precios Claros (Secretaría de Comercio)"*.
+4. Para programar la descarga automática diaria de lunes a viernes, podés usar el workflow gratuito de GitHub Actions incluido en `.github/workflows/update-sepa-prices.yml`.
+
+---
+
+## Paso 9: Ajustes de Despensa Automática (Ronda 4)
+
+Para evitar la confirmación manual cada vez que comprás un producto:
+
+1. Abrí la app y andá a la pestaña **Hogar**.
+2. Tocá **"Configuración del Hogar y Despensa"**.
+3. En la sección *"Al marcar producto como comprado"*, elegí:
+   - **Preguntar**: Te consulta con un diálogo rápido (opción por defecto).
+   - **Sumar auto**: Lo agrega de inmediato a la despensa sumando cantidades, mostrando un toast con botón "Deshacer".
+   - **No sumar**: No realiza ninguna acción.
+4. Podés activar o desactivar la casilla *"No sumar productos de limpieza"* para que lavandinas y detergentes no se mezclen con tus alimentos.
+5. El ajuste se sincroniza en vivo con todos los integrantes de tu hogar.
 
 ---
 
