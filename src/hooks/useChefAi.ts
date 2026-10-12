@@ -24,6 +24,35 @@ import { filterAbsurdIngredients, validateIngredientsAgainstSteps } from '../lib
 import { normalizeString } from '../lib/normalizer';
 import { validateWeeklyPlanVariety } from '../lib/weeklyMenuValidator';
 
+export const isAiDemoMode =
+  typeof import.meta !== 'undefined' &&
+  Boolean(import.meta.env?.VITE_AI_DEMO_MODE === 'true');
+
+export function formatFriendlyAiError(err: any): string {
+  if (!err) return 'Error al comunicarse con el Chef IA. No se descontaron créditos.';
+  const msg = typeof err === 'string' ? err : err.message || err.error || JSON.stringify(err);
+  const lower = String(msg).toLowerCase();
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('muy ocupado')) {
+    return 'El Chef está recibiendo muchas consultas en este momento. Por favor probá de nuevo en un minuto. (No se descontaron créditos)';
+  }
+  if (lower.includes('quota') || lower.includes('límite mensual') || lower.includes('cuota') || lower.includes('credito') || lower.includes('crédito')) {
+    return 'Alcanzaste el límite de consultas de tu plan. No se descontaron créditos adicionales.';
+  }
+  if (lower.includes('premium')) {
+    return 'Esta función requiere el plan Premium de tu hogar.';
+  }
+  if (lower.includes('503') || lower.includes('unavailable') || lower.includes('alta demanda')) {
+    return 'El servicio de IA tiene alta demanda momentánea. Por favor reintentá en unos instantes. (Sin descuento de créditos)';
+  }
+  if (lower.includes('500') || lower.includes('internal server')) {
+    return 'Error en el servidor del Chef IA. Por favor reintentá en unos momentos. (No se descontaron créditos)';
+  }
+  if (lower.includes('timeout') || lower.includes('network') || lower.includes('conexión') || lower.includes('fetch')) {
+    return 'Problema de conexión con el Chef IA. Revisá tu conexión a internet o intentá nuevamente.';
+  }
+  return msg;
+}
+
 export function useChefAi() {
   const { household, remainingQueries, incrementChefUsage } = useHousehold();
   const [loading, setLoading] = useState(false);
@@ -62,25 +91,33 @@ export function useChefAi() {
 
             if (!fnError && data) {
               cookData = data as ChefCookResponse;
+              cookData.origen = cookData.origen || 'ia';
               incrementChefUsage();
             } else {
-              // Edge function aún no desplegada en Supabase: usar motor local
-              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
-              await new Promise((r) => setTimeout(r, 600));
+              if (!isAiDemoMode) {
+                throw new Error(formatFriendlyAiError(fnError || 'Respuesta inválida del Chef IA.'));
+              }
+              // Modo demo explícito: nunca descuenta créditos
               cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
-              incrementChefUsage();
+              cookData.origen = 'demo';
             }
           } catch (fnCallErr) {
-            console.warn('Fallo al invocar Edge Function, usando motor local:', fnCallErr);
-            await new Promise((r) => setTimeout(r, 600));
+            if (!isAiDemoMode) {
+              throw fnCallErr;
+            }
             cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
-            incrementChefUsage();
+            cookData.origen = 'demo';
           }
         } else {
-          // MOCK / DEMO Provider para desarrollo sin credenciales o fuera de línea
-          await new Promise((r) => setTimeout(r, 600));
+          if (!isAiDemoMode) {
+            throw new Error(
+              !household
+                ? 'Debés seleccionar o unirte a un hogar para consultar al Chef.'
+                : 'La conexión con el Chef IA no está configurada.'
+            );
+          }
           cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
-          incrementChefUsage();
+          cookData.origen = 'demo';
         }
 
         // Sanitización silenciosa de servidor y validación contra pasos de receta
@@ -100,7 +137,7 @@ export function useChefAi() {
 
         return { response: cookData, comparisons };
       } catch (err: any) {
-        const msg = err.message || 'Error al comunicarse con el Chef.';
+        const msg = formatFriendlyAiError(err);
         setError(msg);
         throw err;
       } finally {
@@ -135,23 +172,32 @@ export function useChefAi() {
 
             if (!fnError && data) {
               suggestData = data as ChefSuggestResponse;
+              suggestData.origen = suggestData.origen || 'ia';
               incrementChefUsage();
             } else {
-              console.warn('Edge Function chef-ai no disponible, usando motor local:', fnError);
-              await new Promise((r) => setTimeout(r, 600));
+              if (!isAiDemoMode) {
+                throw new Error(formatFriendlyAiError(fnError || 'Respuesta inválida del Chef IA.'));
+              }
               suggestData = generateMockSuggestResponse(pantry, freeText);
-              incrementChefUsage();
+              suggestData.origen = 'demo';
             }
           } catch (fnErr) {
-            console.warn('Fallo al invocar Edge Function, usando motor local:', fnErr);
-            await new Promise((r) => setTimeout(r, 600));
+            if (!isAiDemoMode) {
+              throw fnErr;
+            }
             suggestData = generateMockSuggestResponse(pantry, freeText);
-            incrementChefUsage();
+            suggestData.origen = 'demo';
           }
         } else {
-          await new Promise((r) => setTimeout(r, 600));
+          if (!isAiDemoMode) {
+            throw new Error(
+              !household
+                ? 'Debés seleccionar o unirte a un hogar para consultar al Chef.'
+                : 'La conexión con el Chef IA no está configurada.'
+            );
+          }
           suggestData = generateMockSuggestResponse(pantry, freeText);
-          incrementChefUsage();
+          suggestData.origen = 'demo';
         }
 
         if (suggestData && Array.isArray(suggestData.recetas)) {
@@ -164,7 +210,7 @@ export function useChefAi() {
 
         return suggestData;
       } catch (err: any) {
-        const msg = err.message || 'Error al obtener recetas sugeridas.';
+        const msg = formatFriendlyAiError(err);
         setError(msg);
         throw err;
       } finally {
@@ -337,10 +383,17 @@ export function useChefAi() {
                       })),
                     });
                   } else {
+                    if (!isAiDemoMode) {
+                      throw new Error(formatFriendlyAiError(dayDetailError || `Error al obtener detalles para ${dayCfg.dia}.`));
+                    }
                     const localDay = generateMockDayMealDetail(dayCfg.dia, dayMeals, p, params.pantry);
+                    localDay.comidas.forEach((c) => { (c as any).origen = 'demo'; });
                     builtDays.push(localDay);
                   }
-                } catch {
+                } catch (dayErr) {
+                  if (!isAiDemoMode) {
+                    throw dayErr;
+                  }
                   const localDay = generateMockDayMealDetail(dayCfg.dia, dayMeals, p, params.pantry);
                   builtDays.push(localDay);
                 }
@@ -354,26 +407,34 @@ export function useChefAi() {
                 fuera_de_tema: false,
                 mensaje: null,
                 aclaracion: null,
+                origen: stepAData.origen || 'ia',
                 dias: builtDays,
                 advertencias: stepAData.advertencias || [],
               };
             } else {
-              console.warn('Edge Function chef-ai no disponible o error en Paso A, usando motor local:', stepAError);
-              await new Promise((r) => setTimeout(r, 600));
+              if (!isAiDemoMode) {
+                throw new Error(formatFriendlyAiError(stepAError || 'Error al planificar el menú semanal.'));
+              }
               menuData = generateMockMenuResponse(params);
-              incrementChefUsage();
+              menuData.origen = 'demo';
             }
           } catch (fnErr) {
-            console.warn('Fallo al invocar Edge Function chef-ai, usando motor local:', fnErr);
-            await new Promise((r) => setTimeout(r, 600));
+            if (!isAiDemoMode) {
+              throw fnErr;
+            }
             menuData = generateMockMenuResponse(params);
-            incrementChefUsage();
+            menuData.origen = 'demo';
           }
         } else {
-          // Fallback MOCK / Offline
-          await new Promise((r) => setTimeout(r, 600));
+          if (!isAiDemoMode) {
+            throw new Error(
+              !household
+                ? 'Debés seleccionar o unirte a un hogar para consultar al Chef.'
+                : 'La conexión con el Chef IA no está configurada.'
+            );
+          }
           menuData = generateMockMenuResponse(params);
-          incrementChefUsage();
+          menuData.origen = 'demo';
         }
 
         // Eliminar duplicados del aviso fijo de salud en advertencias
@@ -395,7 +456,7 @@ export function useChefAi() {
 
         return { response: menuData, comparisons };
       } catch (err: any) {
-        const msg = err.message || 'Error al generar el menú semanal.';
+        const msg = formatFriendlyAiError(err);
         setError(msg);
         throw err;
       } finally {
@@ -414,6 +475,7 @@ export function useChefAi() {
     interpretPantry,
     generateWeeklyMenu,
     remainingQueries,
+    isAiDemoMode,
   };
 }
 

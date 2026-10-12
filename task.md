@@ -137,13 +137,13 @@
 
 # Ronda 5
 
-- [ ] **Bloque 0: Diagnóstico (Causa Raíz de Bugs A y B, Sin Corregir Todavía)**
-  - [ ] Rastreo de cadenas fijas ("tomate perita", "arroz", "balanceado con proteínas", etc.) y caminos de fallback/mock/stub en cliente y servidor
-  - [ ] Análisis de clave de ai_cache (pedido normalizado, personas, restricciones, prompt version) y contenido de caché
-  - [ ] Verificación de flujo de GEMINI_API_KEY y modelos en Edge Function ante 429, timeout, JSON inválido, claves ausentes
-  - [ ] Reproducción de bugs A y B con API real vs pantalla
-  - [ ] Documentación de causa raíz con evidencia en `docs/DIAGNOSTICO-R5.md`
-  - [ ] Regla global: Nunca contenido falso en silencio, bandera AI_DEMO_MODE=true visible, campo origen ("ia"|"cache"), test anti-fallbacks silenciosos
+- [x] **Bloque 0: Diagnóstico (Causa Raíz de Bugs A y B, Sin Corregir Todavía)**
+  - [x] Rastreo de cadenas fijas ("tomate perita", "arroz", "balanceado con proteínas", etc.) y caminos de fallback/mock/stub en cliente y servidor
+  - [x] Análisis de clave de ai_cache (pedido normalizado, personas, restricciones, prompt version) y contenido de caché
+  - [x] Verificación de flujo de GEMINI_API_KEY y modelos en Edge Function ante 429, timeout, JSON inválido, claves ausentes
+  - [x] Reproducción de bugs A y B con API real vs pantalla
+  - [x] Documentación de causa raíz con evidencia en `docs/DIAGNOSTICO-R5.md`
+  - [x] Regla global: Nunca contenido falso en silencio, bandera AI_DEMO_MODE=true visible, campo origen ("ia"|"cache"), test anti-fallbacks silenciosos
 - [ ] **Bloque 1: Chef Confiable**
   - [ ] Corrección de causa raíz de Bug A
   - [ ] Clave de caché completa con pedido, personas, restricciones y PROMPT_VERSION; migración para vaciar ai_cache

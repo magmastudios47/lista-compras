@@ -171,17 +171,23 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (cached) {
+      const cachedResponse = {
+        ...cached.response_json,
+        origen: 'cache',
+      };
+
       if (household_id) {
         await supabaseClient.from('ai_usage_log').insert({
           household_id,
           user_id: userId === 'anonymous' ? null : userId,
           mode: modo,
           is_cached: true,
+          origin: 'cache',
           status: 'success',
         });
       }
 
-      return new Response(JSON.stringify(cached.response_json), {
+      return new Response(JSON.stringify(cachedResponse), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -271,6 +277,9 @@ serve(async (req: Request) => {
       });
     }
 
+    // Establecer origen de la respuesta
+    outputData.origen = 'ia';
+
     // 5. Guardar en ai_cache
     await supabaseClient.from('ai_cache').insert({
       cache_key: cacheKey,
@@ -287,6 +296,7 @@ serve(async (req: Request) => {
         completion_tokens: geminiResult.completionTokens,
         total_tokens: geminiResult.totalTokens,
         is_cached: false,
+        origin: 'ia',
         status: 'success',
       });
 

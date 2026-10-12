@@ -110,6 +110,7 @@ export interface ChefCookResponse {
   fuera_de_tema: boolean;
   mensaje: string | null;
   aclaracion: string | null;
+  origen?: 'ia' | 'cache' | 'demo';
   receta?: {
     nombre: string;
     porciones: number;
@@ -145,6 +146,7 @@ export interface ChefSuggestResponse {
   fuera_de_tema: boolean;
   mensaje: string | null;
   aclaracion: string | null;
+  origen?: 'ia' | 'cache' | 'demo';
   recetas: ChefSuggestRecipe[];
   advertencias: string[];
 }
@@ -223,6 +225,7 @@ export interface ChefMenuResponse {
   fuera_de_tema: boolean;
   mensaje: string | null;
   aclaracion: string | null;
+  origen?: 'ia' | 'cache' | 'demo';
   dias: MenuDay[];
   advertencias: string[];
 }
@@ -240,6 +243,7 @@ export interface ChefPlanificarSemanaResponse {
   fuera_de_tema: boolean;
   mensaje: string | null;
   aclaracion: string | null;
+  origen?: 'ia' | 'cache' | 'demo';
   comidas: PlanificarSemanaMeal[];
   advertencias: string[];
 }

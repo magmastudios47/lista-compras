@@ -53,7 +53,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   onAddIngredientsToShoppingList,
 }) => {
   const { isPremium, remainingQueries } = useHousehold();
-  const { generateWeeklyMenu, loading: isGeneratingAi } = useChefAi();
+  const { generateWeeklyMenu, loading: isGeneratingAi, error, isAiDemoMode } = useChefAi();
 
   // Configuración de comidas por día (Lunes a Domingo)
   const [daySelections, setDaySelections] = useState<Record<string, MealType[]>>({
@@ -201,6 +201,11 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                   Premium
                 </span>
+                {isAiDemoMode && (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40">
+                    Modo Demo
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Planificá tus comidas con IA y unificá tus compras sin duplicar.
@@ -208,6 +213,16 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Banner de error visible si falla la IA */}
+        {error && (
+          <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+            <div className="flex-1">
+              <p className="font-semibold">{error}</p>
+            </div>
+          </div>
+        )}
 
         {/* Banner de salud fijo */}
         <div className="mt-3 p-3 rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">

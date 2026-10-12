@@ -57,6 +57,7 @@ export const CookResponseSchema = z.object({
   ingredientes: z.array(ChefIngredientSchema).default([]),
   analisis_plato: z.array(z.string()).optional().default([]),
   advertencias: z.array(z.string()).default([]),
+  origen: z.enum(['ia', 'cache', 'demo']).optional().default('ia'),
 });
 
 export const SuggestRecipeSchema = z.object({
@@ -86,6 +87,7 @@ export const SuggestResponseSchema = z.object({
   aclaracion: z.string().nullable(),
   recetas: z.array(SuggestRecipeSchema).default([]),
   advertencias: z.array(z.string()).default([]),
+  origen: z.enum(['ia', 'cache', 'demo']).optional().default('ia'),
 });
 
 export const InterpretPantryItemSchema = z.object({
@@ -143,6 +145,7 @@ export const MenuResponseSchema = z.object({
   fuera_de_tema: z.boolean().default(false),
   mensaje: z.string().nullable().default(null),
   aclaracion: z.string().nullable().default(null),
+  origen: z.enum(['ia', 'cache', 'demo']).optional().default('ia'),
   dias: z.array(MenuDaySchema).default([]),
   advertencias: z.array(z.string()).default([]),
 });
@@ -160,6 +163,7 @@ export const PlanificarSemanaResponseSchema = z.object({
   fuera_de_tema: z.boolean().default(false),
   mensaje: z.string().nullable().default(null),
   aclaracion: z.string().nullable().default(null),
+  origen: z.enum(['ia', 'cache', 'demo']).optional().default('ia'),
   comidas: z.array(PlanificarSemanaMealSchema).default([]),
   advertencias: z.array(z.string()).default([]),
 });
