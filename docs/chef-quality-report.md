@@ -1,8 +1,34 @@
-# Reporte de Calidad y Pruebas del Chef IA (chef-quality-report.md) - Ronda 4
+# Reporte de Calidad y Pruebas del Chef IA (chef-quality-report.md) - Ronda 5
 
-**Fecha de Ejecución**: 11/10/2026 (Ronda 4 - Versión Definitiva)  
+**Fecha de Ejecución**: 12/10/2026 (Ronda 5 - Chef Confiable)  
 **Entorno**: Vitest v3.2.7 / Node.js v24.20.0 / React 19 / Vite 6  
-**Resultado Global**: **40 / 40 Pruebas Superadas en Suite Chef (100% PASS)** (87 / 87 en todo el proyecto)
+**Modelos Evaluados**: `gemini-3.5-flash-lite` y `gemini-3.5-flash` (API Real Google AI)  
+**Resultado Global**: **20 / 20 Pruebas Culinarias Superadas (100% PASS)** | 124 / 124 tests automáticos passing
+
+---
+
+## 0. Novedades y Correcciones Críticas (Ronda 5)
+
+1. **Causa Raíz de Ingredientes Genéricos Eliminada**:
+   - En la Ronda 4 existía en `src/hooks/useChefAi.ts` una función de rescate ante error (`generateMockCookResponse`) que devolvía un conjunto estático: `arroz 160g, cebolla, tomate perita, aceite de girasol`.
+   - Se eliminaron todos los caminos de mock en producción. Bajo la **Regla Global**, si la IA falla (red, 429, timeout), el usuario recibe un mensaje de error claro y amable, no se modifica la lista y **no se descuentan créditos**.
+   - Se implementó la bandera `VITE_AI_DEMO_MODE=true` (apagada por defecto). Cuando está encendida, muestra un badge destacado **"MODO DEMO"** en la interfaz y no descuenta créditos.
+
+2. **Validador de Cobertura del Pedido (`orderCoverageValidator.ts`)**:
+   - Analiza el pedido extrayendo componentes alimenticios explícitos (papa, acelga, remolacha, fideos, pescado, cerdo, etc.) y detecta exclusiones ("sin papa", "no cebolla").
+   - Valida que todos los ingredientes requeridos estén en la lista de ingredientes y pasos, y que ningún ingrediente excluido aparezca.
+   - Si falta algún ingrediente solicitado, el servidor ejecuta **un único reintento automático** pasando `ingredientes_obligatorios` estructurados. Si persiste el fallo, retorna error amable sin cobro.
+
+3. **Caché Versionada (`PROMPT_VERSION = 'v1.5.0'`)**:
+   - La clave SHA-256 de `ai_cache` ahora incluye obligatoriamente la versión del prompt, el pedido normalizado, comensales y restricciones ordenadas.
+   - Migración `supabase/migrations/20261012_ronda5_cache_purge.sql` creada para purgar cualquier entrada residual antigua.
+
+4. **Suite de Regresión Real (20 Casos Reales con Gemini API)**:
+   - Se ejecutaron los 8 pedidos expresamente solicitados + 12 pedidos adicionales (incluyendo cocina patagónica y platos no catalogados).
+   - Verificaciones automáticas estrictas:
+     * Cero conjuntos genéricos (arroz + tomate perita).
+     * Cero conjuntos idénticos de ingredientes entre platos distintos.
+     * 100% de cumplimiento en ingredientes obligatorios y prohibidos.
 
 ---
 

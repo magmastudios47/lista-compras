@@ -16,6 +16,7 @@ import {
   validateIngredientsAgainstSteps,
 } from '../_shared/culinarySanity.ts';
 import { validateWeeklyPlanVariety } from '../_shared/weeklyMenuValidator.ts';
+import { validateOrderCoverage, normalizeText } from '../_shared/orderCoverageValidator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,9 +157,12 @@ serve(async (req: Request) => {
 
     // 3. Caché de consultas idénticas (para ahorrar tokens y dar respuesta instantánea)
     // Para planificar_semana, los modos de planificación NO usan caché fija simple (incluyen timestamp/semilla)
+    const PROMPT_VERSION = 'v1.5.0';
+    const normalizedOrder = normalizeText(pedido || texto_despensa || JSON.stringify(dias_config || ''));
+    const sortedRestrictions = (restricciones || []).map((r: string) => normalizeText(r)).sort().join(',');
     const normalizedKey = modo === 'planificar_semana'
-      ? `${modo}_${(pedido || '').trim().toLowerCase()}_${Date.now()}`
-      : `${modo}_${(pedido || texto_despensa || JSON.stringify(dias_config || '')).trim().toLowerCase()}_${personas || 4}_${(restricciones || []).sort().join(',')}_${objetivo_perfil || ''}`;
+      ? `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${Date.now()}_${Math.random()}`
+      : `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${personas || 4}_${sortedRestrictions}_${normalizeText(objetivo_perfil || '')}`;
     const cacheKey = await crypto.subtle
       .digest('SHA-256', new TextEncoder().encode(normalizedKey))
       .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join(''));
@@ -229,6 +233,50 @@ serve(async (req: Request) => {
     if (modo === 'cocinar' && outputData.receta) {
       outputData.ingredientes = filterAbsurdIngredients(pedido || outputData.receta.nombre, outputData.ingredientes || []);
       outputData.ingredientes = validateIngredientsAgainstSteps(outputData.receta.pasos, outputData.ingredientes);
+
+      // Validador de cobertura del pedido: cada ingrediente pedido debe figurar en la lista
+      const coverage = validateOrderCoverage(pedido || outputData.receta.nombre, outputData.ingredientes);
+      if (!coverage.valid && coverage.missing.length > 0) {
+        try {
+          const retryResult = await gemini.generateChefResponse(
+            {
+              userData: {
+                modo,
+                pedido: `${pedido || ''} (incluir indispensablemente: ${coverage.missing.join(', ')})`,
+                ingredientes_obligatorios: coverage.missing,
+                personas: personas ? Number(personas) : 4,
+                restricciones: Array.isArray(restricciones) ? restricciones : [],
+                despensa: Array.isArray(despensa) ? despensa : [],
+              },
+            },
+            validator
+          );
+
+          if (retryResult?.data?.receta) {
+            let retryData = retryResult.data;
+            retryData.ingredientes = filterAbsurdIngredients(pedido || retryData.receta.nombre, retryData.ingredientes || []);
+            retryData.ingredientes = validateIngredientsAgainstSteps(retryData.receta.pasos, retryData.ingredientes);
+            const retryCoverage = validateOrderCoverage(pedido || retryData.receta.nombre, retryData.ingredientes);
+            if (retryCoverage.valid) {
+              outputData = retryData;
+            } else {
+              return new Response(
+                JSON.stringify({
+                  error: `El Chef no pudo incluir todos los ingredientes solicitados (${retryCoverage.missing.join(', ')}). No se descontaron créditos.`,
+                }),
+                { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+          }
+        } catch {
+          return new Response(
+            JSON.stringify({
+              error: `El Chef no pudo incluir todos los ingredientes solicitados (${coverage.missing.join(', ')}). No se descontaron créditos.`,
+            }),
+            { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
     } else if (modo === 'sugerir' && Array.isArray(outputData.recetas)) {
       outputData.recetas = outputData.recetas.map((r: any) => {
         const filtered = filterAbsurdIngredients(r.nombre, r.ingredientes || []);

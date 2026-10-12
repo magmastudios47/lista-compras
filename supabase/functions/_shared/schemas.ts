@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const CategoryEnum = z.enum([
+export const CategoryValues = [
   'verduleria',
   'carniceria',
   'almacen',
@@ -11,9 +11,11 @@ export const CategoryEnum = z.enum([
   'congelados',
   'limpieza',
   'otros',
-]);
+] as const;
 
-export const UnitEnum = z.enum([
+export const CategoryEnum = z.enum(CategoryValues);
+
+export const UnitValues = [
   'g',
   'kg',
   'ml',
@@ -27,13 +29,46 @@ export const UnitEnum = z.enum([
   'lata',
   'paquete',
   'pizca',
-]);
+] as const;
+
+export const UnitEnum = z.enum(UnitValues);
+
+export function sanitizeCategory(val: unknown): string {
+  if (typeof val !== 'string') return 'otros';
+  const norm = val.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if ((CategoryValues as readonly string[]).includes(norm)) return norm;
+  if (norm.includes('chacinad') || norm.includes('embutid') || norm.includes('pescad') || norm.includes('pollo')) return 'carniceria';
+  if (norm.includes('queso') || norm.includes('yogur') || norm.includes('leche')) return 'lacteos';
+  if (norm.includes('especia') || norm.includes('condiment') || norm.includes('grano')) return 'almacen';
+  if (norm.includes('verdura') || norm.includes('fruta')) return 'verduleria';
+  if (norm.includes('pan') || norm.includes('harina')) return 'panaderia';
+  if (norm.includes('fiambre')) return 'fiambreria';
+  return 'otros';
+}
+
+export function sanitizeUnit(val: unknown): string {
+  if (typeof val !== 'string') return 'unidad';
+  const norm = val.toLowerCase().trim();
+  if ((UnitValues as readonly string[]).includes(norm)) return norm;
+  if (norm === 'unidades' || norm === 'u' || norm === 'un') return 'unidad';
+  if (norm === 'gramos' || norm === 'gr' || norm === 'grs') return 'g';
+  if (norm === 'kilos' || norm === 'kilo' || norm === 'kgs') return 'kg';
+  if (norm === 'litro' || norm === 'litros' || norm === 'lt') return 'l';
+  if (norm === 'mililitros' || norm === 'cc') return 'ml';
+  if (norm === 'cuchara' || norm === 'cucharadas') return 'cucharada';
+  if (norm === 'cucharaditas') return 'cucharadita';
+  if (norm === 'dientes') return 'diente';
+  if (norm === 'atados') return 'atado';
+  if (norm === 'latas') return 'lata';
+  if (norm === 'paquetes') return 'paquete';
+  return 'unidad';
+}
 
 export const ChefIngredientSchema = z.object({
   nombre: z.string().min(1),
   cantidad: z.number().positive(),
-  unidad: UnitEnum,
-  categoria: CategoryEnum,
+  unidad: z.preprocess(sanitizeUnit, UnitEnum),
+  categoria: z.preprocess(sanitizeCategory, CategoryEnum),
   es_basico: z.boolean().default(false),
   opcional: z.boolean().default(false),
   item_despensa_coincidente: z.string().nullable().default(null),
@@ -108,8 +143,8 @@ export const InterpretItemSchema = z.object({
   texto_original: z.string(),
   nombre: z.string().min(1),
   cantidad: z.number().nullable().default(null),
-  unidad: UnitEnum.nullable().default(null),
-  categoria: CategoryEnum.default('otros'),
+  unidad: z.preprocess((val) => (val === null || val === undefined ? null : sanitizeUnit(val)), UnitEnum.nullable()).default(null),
+  categoria: z.preprocess(sanitizeCategory, CategoryEnum).default('otros'),
   corregido: z.boolean().default(false),
   confianza: z.enum(['alta', 'media', 'baja']).default('alta'),
 });

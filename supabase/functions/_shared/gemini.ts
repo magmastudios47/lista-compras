@@ -15,6 +15,7 @@ export interface GeminiCallOptions {
     objetivo_detalle?: string;
     platos_obligatorios?: string;
     platos_ya_elegidos?: string[];
+    ingredientes_obligatorios?: string[];
   };
   thinkingBudget?: number;
 }
@@ -97,6 +98,7 @@ export class GeminiClient {
         objetivo_detalle: options.userData.objetivo_detalle || null,
         platos_obligatorios: options.userData.platos_obligatorios || null,
         platos_ya_elegidos: options.userData.platos_ya_elegidos || null,
+        ingredientes_obligatorios: options.userData.ingredientes_obligatorios || null,
       },
     };
 
@@ -138,6 +140,9 @@ export class GeminiClient {
     };
 
     let response: Response;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
+
     try {
       response = await fetch(endpoint, {
         method: 'POST',
@@ -145,19 +150,31 @@ export class GeminiClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
     } catch (netErr: any) {
-      throw new Error(`Error de red al consultar el Chef IA: ${netErr.message}`);
-    }
-
-    // Manejo de Rate Limit (HTTP 429) con backoff exponencial
-    if (response.status === 429) {
+      clearTimeout(timeoutId);
       if (retryCount < 2) {
-        const delayMs = Math.pow(2, retryCount) * 1200 + Math.random() * 500;
+        const delayMs = Math.pow(2, retryCount) * 1500;
         await new Promise((r) => setTimeout(r, delayMs));
         return this.generateChefResponse(options, validator, retryCount + 1);
       }
-      throw new Error('El chef está muy ocupado, probá de nuevo en un minuto.');
+      throw new Error(`Error de red al consultar el Chef IA: ${netErr.message}`);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // Manejo de Rate Limit (HTTP 429) y Servidor Ocupado (HTTP 503 / 500) con backoff exponencial
+    if (response.status === 429 || response.status === 503 || response.status === 502) {
+      if (retryCount < 3) {
+        const delayMs = Math.pow(2, retryCount) * 2000 + Math.random() * 800;
+        await new Promise((r) => setTimeout(r, delayMs));
+        return this.generateChefResponse(options, validator, retryCount + 1);
+      }
+      if (response.status === 429) {
+        throw new Error('El chef está muy ocupado, probá de nuevo en un minuto.');
+      }
+      throw new Error('El servicio de IA está experimentando alta demanda, intentá nuevamente.');
     }
 
     if (!response.ok) {

@@ -1103,30 +1103,92 @@ export function generateMockCookResponse(
     };
   }
 
-  // Plato default dinámico
+  // Plato dinámico coherente con el pedido (nunca arroz/tomate perita a ciegas)
+  const dynamicIngredients: ChefIngredient[] = [];
+  const dynamicSteps: string[] = [];
+
+  const hasPapa = /\b(papas?|patatas?)\b/.test(reqLower);
+  const hasAcelga = /\bacelgas?\b/.test(reqLower);
+  const hasHuevo = /\b(huevos?|tortilla|revuelto|omelette)\b/.test(reqLower);
+  const hasPollo = /\b(pollo|suprema|pechuga)\b/.test(reqLower);
+  const hasCarne = /\b(carne|nalga|peceto|cuadril|milanesa)\b/.test(reqLower);
+  const hasZapallo = /\b(zapallo|calabaza|anco)\b/.test(reqLower);
+  const hasZapallito = /\bzapallitos?\b/.test(reqLower);
+  const hasRemolacha = /\bremolachas?\b/.test(reqLower);
+  const hasBatata = /\bbatatas?\b/.test(reqLower);
+  const hasFideos = /\b(fideos?|tallarines|pasta)\b/.test(reqLower);
+  const hasPesto = /\bpesto\b/.test(reqLower);
+  const hasArroz = /\barroz\b/.test(reqLower);
+
+  if (hasPapa) {
+    dynamicIngredients.push({ nombre: 'papa', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`1. Pelar y cortar ${Math.round(persons * 250)} g de papa en cubos o rodajas finas.`);
+  }
+  if (hasAcelga) {
+    dynamicIngredients.push({ nombre: 'acelga', cantidad: Math.max(1, Math.round(persons / 2)), unidad: 'atado', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`2. Lavar, blanquear 2 minutos y escurrir ${Math.max(1, Math.round(persons / 2))} atado de acelga picada.`);
+  }
+  if (hasZapallo) {
+    dynamicIngredients.push({ nombre: 'zapallo anco', cantidad: Math.round(persons * 250), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Hervir ${Math.round(persons * 250)} g de zapallo anco hasta que esté tierno.`);
+  }
+  if (hasZapallito) {
+    dynamicIngredients.push({ nombre: 'zapallito', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cortar ${Math.max(2, persons)} zapallito en cubos medianos.`);
+  }
+  if (hasRemolacha) {
+    dynamicIngredients.push({ nombre: 'remolacha', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cocinar ${Math.max(2, persons)} remolacha en agua hirviendo y pelar.`);
+  }
+  if (hasBatata) {
+    dynamicIngredients.push({ nombre: 'batata', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cortar ${Math.round(persons * 200)} g de batata en bastones o rodajas.`);
+  }
+  if (hasPollo) {
+    dynamicIngredients.push({ nombre: 'pechuga de pollo', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cocinar ${Math.round(persons * 200)} g de pechuga de pollo dorando de ambos lados.`);
+  }
+  if (hasCarne) {
+    dynamicIngredients.push({ nombre: 'carne vacuna', cantidad: Math.round(persons * 200), unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cocinar ${Math.round(persons * 200)} g de carne vacuna.`);
+  }
+  if (hasFideos) {
+    dynamicIngredients.push({ nombre: 'fideos', cantidad: Math.round(persons * 100), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Hervir ${Math.round(persons * 100)} g de fideos al dente.`);
+  }
+  if (hasPesto) {
+    dynamicIngredients.push({ nombre: 'albahaca', cantidad: 1, unidad: 'atado', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicIngredients.push({ nombre: 'nuez', cantidad: 50, unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Procesar 1 atado de albahaca fresca con 50 g de nuez, ajo y aceite.`);
+  }
+  if (hasArroz) {
+    dynamicIngredients.push({ nombre: 'arroz', cantidad: Math.round(persons * 80), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Cocinar ${Math.round(persons * 80)} g de arroz en agua o caldo caliente.`);
+  }
+  if (hasHuevo || dynamicIngredients.length === 0) {
+    dynamicIngredients.push({ nombre: 'huevo', cantidad: Math.max(2, persons), unidad: 'unidad', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null });
+    dynamicSteps.push(`Batir ${Math.max(2, persons)} huevo con sal y pimienta e integrar.`);
+  }
+
+  // Cebolla y aceite de base
+  dynamicIngredients.push({ nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null });
+  dynamicIngredients.push({ nombre: 'aceite de girasol', cantidad: 50, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: null });
+  dynamicSteps.push('Saltear 1 cebolla en 50 ml de aceite de girasol, amalgamar los ingredientes y cocinar a fuego medio hasta dorar.');
+
   return {
     modo: 'cocinar',
     fuera_de_tema: false,
     mensaje: null,
     aclaracion: null,
+    origen: 'demo',
     receta: {
       nombre: mealRequest.charAt(0).toUpperCase() + mealRequest.slice(1),
       porciones: persons,
       tiempo_minutos: 35,
       dificultad: 'facil',
-      pasos: [
-        'Preparar y picar los vegetales de base.',
-        'Cocinar a fuego medio incorporando los ingredientes principales.',
-        'Servir caliente y disfrutar en familia.',
-      ],
+      pasos: dynamicSteps,
     },
-    analisis_plato: [`${mealRequest}: arroz, cebolla, tomate perita, aceite de girasol`],
-    ingredientes: [
-      { nombre: 'arroz', cantidad: Math.round(persons * 80), unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: 'arroz largo fino' },
-      { nombre: 'cebolla', cantidad: Math.max(1, Math.round(persons * 0.5)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: 'cebollas' },
-      { nombre: 'tomate perita', cantidad: Math.max(2, Math.round(persons * 1)), unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
-      { nombre: 'aceite de girasol', cantidad: 50, unidad: 'ml', categoria: 'almacen', es_basico: true, opcional: false, item_despensa_coincidente: 'aceite de girasol' },
-    ],
+    ingredientes: dynamicIngredients,
     advertencias: restrictions.length > 0 ? [`Adaptado para: ${restrictions.join(', ')}`] : [],
   };
 }

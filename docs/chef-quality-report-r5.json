@@ -1,0 +1,352 @@
+[
+  {
+    "id": 1,
+    "pedido": "tortilla de papas con acelga para 2",
+    "error": "Falta cobertura de ingredientes pedidos: acelga",
+    "status": "FALLIDO"
+  },
+  {
+    "id": 2,
+    "pedido": "tarta de acelga para 4",
+    "receta": "Tarta de acelga",
+    "ingredientes": [
+      "acelga",
+      "cebolla",
+      "morron rojo",
+      "huevo",
+      "queso cremoso",
+      "queso rallado",
+      "tapas de tarta"
+    ],
+    "tokens": 5484,
+    "status": "APROBADO"
+  },
+  {
+    "id": 3,
+    "pedido": "ensalada de remolacha y huevo para 2",
+    "receta": "Ensalada de remolacha y huevo",
+    "ingredientes": [
+      "remolacha",
+      "huevo",
+      "ajo",
+      "aceite de girasol",
+      "vinagre",
+      "sal"
+    ],
+    "tokens": 5318,
+    "status": "APROBADO"
+  },
+  {
+    "id": 4,
+    "pedido": "tallarines con pesto para 3",
+    "receta": "Tallarines con pesto",
+    "ingredientes": [
+      "fideos",
+      "albahaca",
+      "ajo",
+      "nueces",
+      "queso rallado",
+      "aceite de girasol"
+    ],
+    "tokens": 5352,
+    "status": "APROBADO"
+  },
+  {
+    "id": 5,
+    "pedido": "revuelto de zapallitos para 2",
+    "receta": "Revuelto de zapallitos",
+    "ingredientes": [
+      "zapallito",
+      "cebolla",
+      "ajo",
+      "huevo",
+      "aceite de girasol"
+    ],
+    "tokens": 5177,
+    "status": "APROBADO"
+  },
+  {
+    "id": 6,
+    "pedido": "pastel de papas para 4",
+    "receta": "Pastel de papas",
+    "ingredientes": [
+      "papa",
+      "cebolla",
+      "morron rojo",
+      "carne picada",
+      "manteca",
+      "leche",
+      "huevo",
+      "aceitunas",
+      "queso rallado",
+      "aceite de girasol",
+      "pimenton dulce",
+      "aji molido"
+    ],
+    "tokens": 5889,
+    "status": "APROBADO"
+  },
+  {
+    "id": 7,
+    "pedido": "milanesa con puré de zapallo para 4",
+    "receta": "Milanesas con puré de zapallo",
+    "ingredientes": [
+      "nalga para milanesas",
+      "pan rallado",
+      "huevo",
+      "zapallo anco",
+      "manteca",
+      "leche",
+      "ajo",
+      "perejil",
+      "aceite de girasol",
+      "sal",
+      "pimienta",
+      "nuez moscada"
+    ],
+    "tokens": 5793,
+    "status": "APROBADO"
+  },
+  {
+    "id": 8,
+    "pedido": "pollo al horno con batata para 4",
+    "receta": "Pollo al horno con batata",
+    "ingredientes": [
+      "pollo",
+      "batata",
+      "cebolla",
+      "morron",
+      "ajo",
+      "romero",
+      "aceite de girasol",
+      "caldo de verduras"
+    ],
+    "tokens": 5476,
+    "status": "APROBADO"
+  },
+  {
+    "id": 9,
+    "pedido": "guiso de lentejas con chorizo para 4",
+    "receta": "Guiso de lentejas con chorizo colorado",
+    "ingredientes": [
+      "lenteja",
+      "chorizo colorado",
+      "roast beef",
+      "cebolla",
+      "morron rojo",
+      "zanahoria",
+      "papa",
+      "ajo",
+      "pure de tomate",
+      "caldo de carne",
+      "pimenton dulce",
+      "comino",
+      "aceite de girasol",
+      "sal",
+      "pimienta"
+    ],
+    "tokens": 6061,
+    "status": "APROBADO"
+  },
+  {
+    "id": 10,
+    "pedido": "risotto de hongos de pino para 2",
+    "receta": "Risotto de hongos de pino",
+    "ingredientes": [
+      "hongos de pino",
+      "cebolla",
+      "ajo",
+      "caldo de verdura",
+      "manteca",
+      "aceite de girasol",
+      "arroz arborio",
+      "vino blanco",
+      "queso rallado"
+    ],
+    "tokens": 5610,
+    "status": "APROBADO"
+  },
+  {
+    "id": 11,
+    "pedido": "locro criollo tradicional para 6",
+    "receta": "Locro criollo tradicional",
+    "ingredientes": [
+      "maiz blanco pisado",
+      "porotos pallares",
+      "falda vacuna",
+      "pechito de cerdo",
+      "panceta ahumada",
+      "chorizo colorado",
+      "zapallo anco",
+      "cebolla",
+      "morron rojo",
+      "cebolla de verdeo",
+      "pimenton dulce",
+      "comino",
+      "aceite de girasol",
+      "sal"
+    ],
+    "tokens": 6093,
+    "status": "APROBADO"
+  },
+  {
+    "id": 12,
+    "pedido": "trucha a la manteca con almendras para 2",
+    "receta": "Trucha a la manteca con almendras",
+    "ingredientes": [
+      "trucha",
+      "almendra",
+      "manteca",
+      "limon",
+      "aceite de girasol"
+    ],
+    "tokens": 5245,
+    "status": "APROBADO"
+  },
+  {
+    "id": 13,
+    "pedido": "berenjenas a la parmesana para 3",
+    "receta": "Berenjenas a la parmesana",
+    "ingredientes": [
+      "berenjena",
+      "pure de tomate",
+      "cebolla",
+      "ajo",
+      "jamon cocido",
+      "queso cremoso",
+      "queso rallado"
+    ],
+    "tokens": 5491,
+    "status": "APROBADO"
+  },
+  {
+    "id": 14,
+    "pedido": "canelones de verdura y ricota para 4",
+    "receta": "Canelones de verdura y ricota",
+    "ingredientes": [
+      "acelga",
+      "ricota",
+      "cebolla",
+      "ajo",
+      "huevo",
+      "queso rallado",
+      "tapas para pascualina",
+      "salsa de tomate",
+      "queso cremoso",
+      "aceite de girasol"
+    ],
+    "tokens": 5716,
+    "status": "APROBADO"
+  },
+  {
+    "id": 15,
+    "pedido": "empanadas salteñas de carne para 4",
+    "receta": "Empanadas salteñas de carne",
+    "ingredientes": [
+      "roast beef",
+      "tapas de empanada",
+      "cebolla",
+      "verdeo",
+      "papa",
+      "huevo",
+      "grasa vacuna",
+      "pimenton dulce",
+      "comino",
+      "aji molido"
+    ],
+    "tokens": 5658,
+    "status": "APROBADO"
+  },
+  {
+    "id": 16,
+    "pedido": "humita en olla con queso para 4",
+    "receta": "Humita en olla con queso",
+    "ingredientes": [
+      "choclo",
+      "cebolla",
+      "morron rojo",
+      "queso cremoso",
+      "leche",
+      "aceite de girasol",
+      "pimenton dulce",
+      "comino"
+    ],
+    "tokens": 5480,
+    "status": "APROBADO"
+  },
+  {
+    "id": 17,
+    "pedido": "costillitas de cerdo a la riojana para 2",
+    "receta": "Costillitas de cerdo a la riojana",
+    "ingredientes": [
+      "costillitas de cerdo",
+      "papa",
+      "huevo",
+      "arvejas",
+      "morron rojo",
+      "ajo"
+    ],
+    "tokens": 5361,
+    "status": "APROBADO"
+  },
+  {
+    "id": 18,
+    "pedido": "wok de vegetales con fideos para 2",
+    "receta": "Wok de vegetales con fideos",
+    "ingredientes": [
+      "fideos",
+      "cebolla",
+      "morron rojo",
+      "zanahoria",
+      "zucchini",
+      "chaucha",
+      "salsa de soja",
+      "aceite de girasol"
+    ],
+    "tokens": 5460,
+    "status": "APROBADO"
+  },
+  {
+    "id": 19,
+    "pedido": "carbonada patagónica en zapallo para 4",
+    "receta": "Carbonada patagónica en zapallo",
+    "ingredientes": [
+      "zapallo anco",
+      "carne vacuna",
+      "cebolla",
+      "morron rojo",
+      "ajo",
+      "tomate perita",
+      "batata",
+      "papa",
+      "choclo",
+      "caldo de carne",
+      "durazno",
+      "frutos rojos",
+      "aceite de girasol",
+      "laurel",
+      "pimenton dulce",
+      "sal",
+      "pimienta"
+    ],
+    "tokens": 6294,
+    "status": "APROBADO"
+  },
+  {
+    "id": 20,
+    "pedido": "matambre a la pizza para 4",
+    "receta": "Matambre a la pizza",
+    "ingredientes": [
+      "matambre vacuno",
+      "leche",
+      "salsa de tomate",
+      "muzzarella",
+      "cebolla",
+      "morron rojo",
+      "aceituna negra",
+      "provenzal"
+    ],
+    "tokens": 5493,
+    "status": "APROBADO"
+  }
+]

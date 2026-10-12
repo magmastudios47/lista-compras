@@ -144,12 +144,12 @@
   - [x] Reproducción de bugs A y B con API real vs pantalla
   - [x] Documentación de causa raíz con evidencia en `docs/DIAGNOSTICO-R5.md`
   - [x] Regla global: Nunca contenido falso en silencio, bandera AI_DEMO_MODE=true visible, campo origen ("ia"|"cache"), test anti-fallbacks silenciosos
-- [ ] **Bloque 1: Chef Confiable**
-  - [ ] Corrección de causa raíz de Bug A
-  - [ ] Clave de caché completa con pedido, personas, restricciones y PROMPT_VERSION; migración para vaciar ai_cache
-  - [ ] Validador de cobertura del pedido (productos nombrados deben estar en ingredientes salvo "sin X", reintento único, sin cobro si falla)
-  - [ ] Suite de pruebas de regresión culinaria con IA real (>=12 pedidos variados, test anti-duplicados y anti-arroz genérico)
-  - [ ] Pruebas end-to-end en navegador (cocinar y sugerir) y reporte en `docs/chef-quality-report.md`
+- [x] **Bloque 1: Chef Confiable**
+  - [x] Corrección de causa raíz de Bug A
+  - [x] Clave de caché completa con pedido, personas, restricciones y PROMPT_VERSION; migración para vaciar ai_cache
+  - [x] Validador de cobertura del pedido (productos nombrados deben estar en ingredientes salvo "sin X", reintento único, sin cobro si falla)
+  - [x] Suite de pruebas de regresión culinaria con IA real (>=12 pedidos variados, test anti-duplicados y anti-arroz genérico)
+  - [x] Pruebas end-to-end en navegador (cocinar y sugerir) y reporte en `docs/chef-quality-report.md`
 - [ ] **Bloque 2: Menú Semanal Sin Repeticiones**
   - [ ] Corrección de causa raíz de Bug B (validadores de variedad sobre resultado final, interfaz sin relleno ni reciclado)
   - [ ] Semilla aleatoria por pedido, histórico de últimos 2 menús a evitar

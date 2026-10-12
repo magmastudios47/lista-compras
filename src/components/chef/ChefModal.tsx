@@ -169,7 +169,7 @@ export const ChefModal: React.FC<ChefModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
-                <span>El Chef de Compars</span>
+                <span>El Chef</span>
                 {isAiDemoMode && (
                   <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40">
                     Modo Demo
