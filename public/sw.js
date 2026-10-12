@@ -1,5 +1,5 @@
 // Service Worker para Lista Compars PWA
-const CACHE_NAME = 'compars-v1.0.1';
+const CACHE_NAME = 'compars-v1.4.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
