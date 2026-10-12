@@ -519,18 +519,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ACTUALIZACIÓN DE POLÍTICAS RLS EN TABLAS DE DATOS
 -- Solo se puede leer/escribir si el hogar cuenta con licencia activa
 -- ------------------------------------------------------------------------
--- 1. shopping_lists
-DROP POLICY IF EXISTS "Miembros pueden ver listas de compras" ON public.shopping_lists;
-CREATE POLICY "Miembros con licencia activa pueden ver listas de compras"
-    ON public.shopping_lists FOR SELECT
-    USING (public.user_belongs_to_household(household_id) AND public.has_active_license(household_id));
-
-DROP POLICY IF EXISTS "Miembros pueden modificar listas de compras" ON public.shopping_lists;
-CREATE POLICY "Miembros con licencia activa pueden modificar listas de compras"
-    ON public.shopping_lists FOR ALL
-    USING (public.user_belongs_to_household(household_id) AND public.has_active_license(household_id));
-
--- 2. shopping_items
+-- 1. shopping_items
 DROP POLICY IF EXISTS "Miembros pueden ver items de compra" ON public.shopping_items;
 CREATE POLICY "Miembros con licencia activa pueden ver items de compra"
     ON public.shopping_items FOR SELECT
