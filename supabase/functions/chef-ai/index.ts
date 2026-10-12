@@ -100,7 +100,37 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Control de Acceso por Plan y Cuota Mensual
+    // 2. Control de Acceso: ACCESS_MODE y Licencia Activa del Hogar (Ronda 5)
+    const ACCESS_MODE = Deno.env.get('ACCESS_MODE') ?? 'closed';
+    const TRIAL_CREDITS = parseInt(Deno.env.get('TRIAL_CREDITS') ?? '0', 10);
+
+    let activeLicense: any = null;
+    if (household_id) {
+      const { data: licenseData } = await supabaseClient
+        .from('licenses')
+        .select('plan_id, status, valid_until')
+        .eq('household_id', household_id)
+        .eq('status', 'active')
+        .maybeSingle();
+      activeLicense = licenseData;
+    }
+
+    const hasValidLicense = activeLicense &&
+      ['base', 'premium', 'tester'].includes(activeLicense.plan_id) &&
+      (!activeLicense.valid_until || new Date(activeLicense.valid_until) > new Date());
+
+    if (ACCESS_MODE === 'closed') {
+      if (!household_id || (!hasValidLicense && TRIAL_CREDITS <= 0)) {
+        return new Response(
+          JSON.stringify({
+            error: 'Acceso restringido: este hogar no cuenta con una licencia activa de Lista Compars.',
+            code: 'LICENSE_REQUIRED',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
     const isMenuMode = modo === 'menu' || modo === 'planificar_semana' || modo === 'detalle_dia_menu' || modo === 'regenerar_plato';
@@ -108,16 +138,9 @@ serve(async (req: Request) => {
     const queryCost = modo === 'detalle_dia_menu' ? 0 : (modo === 'regenerar_plato' ? 1 : (isMenuMode ? 3 : 1));
 
     if (household_id) {
-      // Si es modo menu / planificar_semana, verificar plan Premium
+      // Si es modo menu / planificar_semana, verificar plan Premium o Tester
       if (isMenuMode) {
-        const { data: license } = await supabaseClient
-          .from('licenses')
-          .select('plan_id, status')
-          .eq('household_id', household_id)
-          .eq('status', 'active')
-          .maybeSingle();
-
-        if (!license || license.plan_id !== 'premium') {
+        if (!activeLicense || (activeLicense.plan_id !== 'premium' && activeLicense.plan_id !== 'tester')) {
           return new Response(
             JSON.stringify({
               error: 'La planificación del Menú Semanal requiere el plan Premium.',

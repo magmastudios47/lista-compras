@@ -244,3 +244,29 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
      - Se eliminaron todos los mocks y auto-logins ("Facundo", "Los Pehuenes", semillas iniciales de productos).
      - Flujo de bienvenida obligatorio: Ingreso -> Nombre para mostrar (vacío, obligatorio) -> "Crear mi hogar" (nombre vacío, ciudad opcional) o "Unirme con link o código".
      - Al ingresar, las listas, despensa y menú inician completamente vacíos.
+
+---
+
+### Decisión 23: Ronda 5 Bloque 4 - Acceso Solo para Quienes Compran, Invitaciones Criptográficas y Códigos de Acceso
+- **Contexto**: Se requería que solo los hogares con licencia activa utilicen la aplicación. Compartir un enlace no debe conceder acceso ilimitado, la licencia pertenece al HOGAR y no a una persona individual, y en modo cerrado (`closed`) ningún usuario sin licencia debe consumir recursos de IA o datos.
+- **Decisión**:
+  1. **Control de Acceso en Servidor (`ACCESS_MODE = 'closed'`)**:
+     - Función SQL `has_active_license(household_id UUID)` que verifica que el hogar posea una licencia con estado `'active'` y plan pago (`base`, `premium`, `tester`).
+     - Aplicado en RLS de tablas de datos (`shopping_lists`, `shopping_items`, `pantry_items`, `household_settings`) y en la Edge Function `chef-ai` (rechaza con 403 `LICENSE_REQUIRED` sin consultar la IA).
+     - En el cliente, si el hogar no tiene licencia activa, se renderiza exclusivamente la pantalla de acceso `<AccessGateView />` con tres opciones: "Tengo un código de acceso", "Comprar acceso" y "Me invitaron a un hogar".
+  2. **Pantalla Pública (`PublicLandingView`)**:
+     - Visitantes sin sesión activa ven una landing con descripción de la app, características destacadas, precios leídos en tiempo real de la base de datos (Plan Base US$ 10, Plan Premium US$ 20 al cambio oficial en ARS), botón "Ingresar" y botón "Comprar".
+  3. **Códigos de Acceso de Un Solo Uso (`access_codes`)**:
+     - Tabla `access_codes` almacena el hash SHA-256 del código en mayúsculas, plan, usos máximos (1 por defecto), usos actuales y vencimiento.
+     - Script local con service role `scripts/create-access-code.ts` para que el dueño genere códigos de regalo o venta directa para familiares y primeros clientes.
+     - Función RPC `redeem_access_code` con bloqueo de fila `FOR UPDATE` que previene condiciones de carrera o canjes dobles, crea el hogar y activa la licencia inmediatamente.
+  4. **Enlaces de Invitación Criptográficos de 128 Bits (`household_invitations`)**:
+     - Solo los propietarios (`role: 'owner'`) pueden generar enlaces de invitación.
+     - Cada enlace utiliza un token aleatorio de al menos 128 bits (32 caracteres hexadecimales) guardado exclusivamente como hash SHA-256 en la base de datos.
+     - Vencimiento configurable a 7 días, revocable por el dueño, y generar un nuevo link invalida automáticamente los anteriores.
+     - Al abrir el enlace, se muestra una previsualización con el nombre del hogar y ciudad pidiendo confirmación explícita.
+     - Verificación atómica de tope de integrantes por plan (Base: 6 integrantes, Premium: 8 integrantes, Tester: 99) mediante bloqueo de fila en `join_household_via_invitation`. Intentos concurrentes que superen el tope son rechazados con mensaje claro.
+     - Registro de intentos en `invite_attempt_logs` con rate limit para frenar ataques de adivinación de tokens.
+  5. **Plan Interno "Tester"**:
+     - Plan no comprable (`tester`), asignable exclusivamente mediante el script de service role `scripts/assign-tester-plan.ts`, que otorga 9999 consultas/mes, hasta 99 integrantes y acceso a todas las funcionalidades avanzadas (menú semanal y SEPA) para pruebas del dueño sin toparse con límites.
+

@@ -48,3 +48,8 @@ export const MAX_CHEF_MONTHLY_FREE = 40;
 export const MAX_CHEF_RATE_PER_MIN = 5;
 export const USD_LIFETIME_PRICE = 4.99;
 export const ARS_EXCHANGE_RATE = 1350;
+
+// Variables de control de acceso y licencias (Ronda 5)
+export const ACCESS_MODE: 'closed' | 'open' = (import.meta.env.VITE_ACCESS_MODE || 'closed') as 'closed' | 'open';
+export const TRIAL_CREDITS = parseInt(import.meta.env.VITE_TRIAL_CREDITS || '0', 10);
+

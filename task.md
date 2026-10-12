@@ -161,14 +161,14 @@
   - [x] Arranque desde cero: eliminación de datos predeterminados (Facundo, Junín, sesión predeterminada), nuevo flujo de ingreso/creación de hogar
   - [x] Pruebas de persistencia, sincronización multidispositivo y usuario nuevo sin datos
   - [x] Snippet SQL en `SETUP.md` para limpieza de datos de prueba
-- [ ] **Bloque 4: Acceso Solo para Quienes Compran**
-  - [ ] Variable `ACCESS_MODE` ("closed" por defecto, "open" para tests), verificación en servidor y pantalla de acceso/paywall
-  - [ ] Pantalla pública para no autenticados con precios leídos del servidor
-  - [ ] Códigos de acceso (`access_codes`) con hash, usos máximos, expiración y script `scripts/create-access-code`
-  - [ ] Compra de licencia de hogar con flujo seguro de Mercado Pago (servidor + webhook)
-  - [ ] Links de invitación con token de 128 bits hasheado, 7 días de validez, tope de integrantes por plan verificado atómicamente y revocación
-  - [ ] Plan interno "tester" con créditos altos (solo service role); sin licencia = 0 créditos
-  - [ ] Pruebas de acceso no autorizado, links vencidos/revocados, condición de carrera en tope y RLS
+- [x] **Bloque 4: Acceso Solo para Quienes Compran**
+  - [x] Variable `ACCESS_MODE` ("closed" por defecto, "open" para tests), verificación en servidor y pantalla de acceso/paywall
+  - [x] Pantalla pública para no autenticados con precios leídos del servidor
+  - [x] Códigos de acceso (`access_codes`) con hash, usos máximos, expiración y script `scripts/create-access-code`
+  - [x] Compra de licencia de hogar con flujo seguro de Mercado Pago (servidor + webhook)
+  - [x] Links de invitación con token de 128 bits hasheado, 7 días de validez, tope de integrantes por plan verificado atómicamente y revocación
+  - [x] Plan interno "tester" con créditos altos (solo service role); sin licencia = 0 créditos
+  - [x] Pruebas de acceso no autorizado, links vencidos/revocados, condición de carrera en tope y RLS
 - [ ] **Bloque 5: Costos, Créditos y Recargas**
   - [ ] Instrumentación de `ai_usage_log` con tokens de entrada, salida, razonamiento, costo USD, modo, origen y éxito; tabla `ai_pricing` con fecha de vigencia
   - [ ] Medición real Flash vs Flash-Lite y reasoning bajo vs off en `docs/COSTOS.md`; recomendación por modo y variables de modelo

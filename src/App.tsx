@@ -18,7 +18,10 @@ import { useHousehold } from './context/HouseholdContext';
 import { useAuth } from './context/AuthContext';
 import { useOfflineSync } from './context/OfflineSyncContext';
 import { UserSetupFlow } from './components/auth/UserSetupFlow';
-import { STORAGE_KEYS } from './lib/constants';
+import { PublicLandingView } from './components/public/PublicLandingView';
+import { AccessGateView } from './components/auth/AccessGateView';
+import { InviteAcceptModal } from './components/household/InviteAcceptModal';
+import { STORAGE_KEYS, ACCESS_MODE } from './lib/constants';
 import { ShoppingItem } from './types';
 import { pantrySyncManager } from './lib/pantryAutoSync';
 
@@ -27,6 +30,17 @@ export const App: React.FC = () => {
   const [isReturnView, setIsReturnView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('payment_status') || params.has('status');
+  });
+
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (token) {
+      sessionStorage.setItem('pending_invite', token);
+      return token;
+    }
+    return sessionStorage.getItem('pending_invite');
   });
 
   // Modales
@@ -38,7 +52,13 @@ export const App: React.FC = () => {
 
   const { isOnline } = useOfflineSync();
   const { user, loading: authLoading } = useAuth();
-  const { household, loading: householdLoading, remainingQueries, updateHouseholdSettings } = useHousehold();
+  const {
+    household,
+    loading: householdLoading,
+    remainingQueries,
+    hasActiveLicense,
+    updateHouseholdSettings,
+  } = useHousehold();
 
   const {
     items,
@@ -147,8 +167,62 @@ export const App: React.FC = () => {
     );
   }
 
-  if (!user || !user.displayName || !household) {
-    return <UserSetupFlow />;
+  // 1. Visitante sin autenticar: Pantalla pública / Landing con precios
+  if (!user) {
+    if (showAuthModal) {
+      return <UserSetupFlow onBack={() => setShowAuthModal(false)} />;
+    }
+    return (
+      <PublicLandingView
+        onLoginClick={() => setShowAuthModal(true)}
+        onCodeClick={() => setShowAuthModal(true)}
+        onSelectPlanToBuy={() => setShowAuthModal(true)}
+      />
+    );
+  }
+
+  // 2. Usuario sin nombre para mostrar o sin hogar configurado
+  if (!user.displayName || !household) {
+    return (
+      <>
+        {inviteToken && (
+          <InviteAcceptModal
+            token={inviteToken}
+            onClose={() => {
+              setInviteToken(null);
+              sessionStorage.removeItem('pending_invite');
+            }}
+            onJoined={() => {
+              setInviteToken(null);
+              sessionStorage.removeItem('pending_invite');
+            }}
+          />
+        )}
+        <UserSetupFlow />
+      </>
+    );
+  }
+
+  // 3. Modal de invitación si se abrió con token y ya tiene hogar
+  if (inviteToken) {
+    return (
+      <InviteAcceptModal
+        token={inviteToken}
+        onClose={() => {
+          setInviteToken(null);
+          sessionStorage.removeItem('pending_invite');
+        }}
+        onJoined={() => {
+          setInviteToken(null);
+          sessionStorage.removeItem('pending_invite');
+        }}
+      />
+    );
+  }
+
+  // 4. En modo cerrado (ACCESS_MODE = 'closed'), si el hogar NO cuenta con licencia activa, mostrar AccessGateView
+  if (ACCESS_MODE === 'closed' && !hasActiveLicense) {
+    return <AccessGateView />;
   }
 
   return (

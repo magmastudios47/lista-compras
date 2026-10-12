@@ -3,7 +3,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useHousehold } from '../../context/HouseholdContext';
 import { ShoppingCart, Sparkles, Home, Link2, ArrowRight, UserCheck } from 'lucide-react';
 
-export const UserSetupFlow: React.FC = () => {
+interface UserSetupFlowProps {
+  onBack?: () => void;
+}
+
+export const UserSetupFlow: React.FC<UserSetupFlowProps> = ({ onBack }) => {
   const { user, signInWithGoogle, signInWithMagicLink, signInWithLocalName, setDisplayName, isDemoMode } = useAuth();
   const { household, createHousehold, joinHouseholdByCode } = useHousehold();
 
@@ -180,6 +184,16 @@ export const UserSetupFlow: React.FC = () => {
                 </button>
               </form>
             </div>
+          )}
+
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-4 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
+            >
+              ← Volver a la página principal
+            </button>
           )}
         </div>
       </div>

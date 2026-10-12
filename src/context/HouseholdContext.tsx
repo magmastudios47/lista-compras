@@ -2,9 +2,9 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { Household, HouseholdMember } from '../types';
 import { useAuth } from './AuthContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
-import { STORAGE_KEYS } from '../lib/constants';
+import { STORAGE_KEYS, ACCESS_MODE, TRIAL_CREDITS } from '../lib/constants';
 
-export type PlanType = 'free' | 'base' | 'premium';
+export type PlanType = 'free' | 'base' | 'premium' | 'tester';
 
 export interface LicenseInfo {
   plan_id: PlanType;
@@ -12,22 +12,37 @@ export interface LicenseInfo {
   activated_at?: string;
 }
 
-interface HouseholdContextType {
+export interface HouseholdContextType {
   household: Household | null;
   members: HouseholdMember[];
   loading: boolean;
   remainingQueries: number;
   currentPlan: PlanType;
+  hasActiveLicense: boolean;
+  isOwner: boolean;
   isPremium: boolean;
   createHousehold: (name: string, city?: string) => Promise<Household>;
   joinHouseholdByCode: (code: string) => Promise<{ success: boolean; message: string }>;
   getWhatsAppInviteUrl: () => string;
+  createInviteLink: (options?: { maxUses?: number; expiresDays?: number; requiresApproval?: boolean }) => Promise<{ success: boolean; inviteUrl?: string; error?: string }>;
+  previewInvite: (rawToken: string) => Promise<{ valid: boolean; householdId?: string; householdName?: string; householdCity?: string; requiresApproval?: boolean; error?: string }>;
+  joinByInvite: (rawToken: string) => Promise<{ success: boolean; householdId?: string; householdName?: string; alreadyMember?: boolean; pendingApproval?: boolean; error?: string }>;
+  removeMember: (memberUserId: string) => Promise<{ success: boolean; error?: string }>;
+  redeemAccessCode: (code: string, householdName?: string, city?: string) => Promise<{ success: boolean; householdId?: string; planId?: PlanType; error?: string }>;
   incrementChefUsage: () => void;
   refreshLicense: () => Promise<void>;
+  refreshMembers: () => Promise<void>;
   updateHouseholdSettings: (settings: Partial<Household>) => Promise<Household>;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
+
+// Helper para hashing SHA-256 en cliente
+async function sha256Hex(text: string): Promise<string> {
+  const buffer = new TextEncoder().encode(text.trim());
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isDemoMode } = useAuth();
@@ -40,30 +55,50 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Consulta la licencia activa exclusivamente desde la base de datos
   const fetchLicense = useCallback(async (householdId: string) => {
     if (!isConfigured || isDemoMode) {
-      setCurrentPlan('free');
+      // En modo demo o sin Supabase configurado, respetar ACCESS_MODE
+      setCurrentPlan(ACCESS_MODE === 'open' ? 'base' : 'free');
       return;
     }
 
     try {
       const { data: licenseData, error } = await supabase
         .from('licenses')
-        .select('plan_id, status')
+        .select('plan_id, status, valid_until')
         .eq('household_id', householdId)
         .eq('status', 'active')
         .maybeSingle();
 
       if (!error && licenseData) {
-        setCurrentPlan(licenseData.plan_id as PlanType);
-      } else {
-        setCurrentPlan('free');
+        const isNotExpired = !licenseData.valid_until || new Date(licenseData.valid_until) > new Date();
+        if (isNotExpired) {
+          setCurrentPlan(licenseData.plan_id as PlanType);
+          return;
+        }
       }
+      setCurrentPlan('free');
     } catch (err) {
       console.warn('Error consultando licencia:', err);
       setCurrentPlan('free');
     }
   }, [isDemoMode]);
 
-  // Carga de hogar
+  // Consulta integrantes del hogar
+  const fetchMembers = useCallback(async (householdId: string) => {
+    if (!isConfigured || isDemoMode) return;
+    try {
+      const { data: allMembers, error } = await supabase
+        .from('household_members')
+        .select('*')
+        .eq('household_id', householdId);
+      if (!error && allMembers) {
+        setMembers(allMembers as HouseholdMember[]);
+      }
+    } catch (err) {
+      console.warn('Error cargando integrantes:', err);
+    }
+  }, [isDemoMode]);
+
+  // Carga de hogar del usuario actual
   useEffect(() => {
     if (!user) {
       setHousehold(null);
@@ -85,12 +120,12 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 id: `m_${parsed.id}`,
                 household_id: parsed.id,
                 user_id: user.id,
-                role: 'admin',
-                display_name: user.displayName || 'Administrador',
+                role: 'owner',
+                display_name: user.displayName || 'Propietario',
                 joined_at: parsed.created_at || new Date().toISOString(),
               },
             ]);
-            setCurrentPlan('free');
+            setCurrentPlan(ACCESS_MODE === 'open' ? 'base' : 'free');
             setLoading(false);
             return;
           }
@@ -119,13 +154,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setChefUsedThisMonth(current.chef_queries_used_month || 0);
           localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(current));
 
-          // Cargar miembros
-          const { data: allMembers } = await supabase
-            .from('household_members')
-            .select('*')
-            .eq('household_id', current.id);
-          if (allMembers) setMembers(allMembers as HouseholdMember[]);
-
+          await fetchMembers(current.id);
           await fetchLicense(current.id);
         } else {
           setHousehold(null);
@@ -141,13 +170,13 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     fetchHousehold();
-  }, [user, isDemoMode, fetchLicense]);
+  }, [user, isDemoMode, fetchLicense, fetchMembers]);
 
   // Suscripción Realtime a cambios en la tabla licenses para actualizar el plan instantáneamente al confirmarse el webhook
   useEffect(() => {
     if (!household?.id || isDemoMode || !isConfigured) return;
 
-    const channel = supabase
+    const licenseChannel = supabase
       .channel(`license_updates_${household.id}`)
       .on(
         'postgres_changes',
@@ -164,16 +193,16 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(licenseChannel);
     };
   }, [household?.id, isDemoMode, fetchLicense]);
 
-  // Suscripción Realtime a households
+  // Suscripción Realtime a cambios en el hogar
   useEffect(() => {
     if (!household?.id || isDemoMode || !isConfigured) return;
 
     const hhChannel = supabase
-      .channel(`household_changes_${household.id}`)
+      .channel(`household_updates_${household.id}`)
       .on(
         'postgres_changes',
         {
@@ -200,19 +229,6 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [household?.id, isDemoMode]);
 
-  // Verificar código de invitación en la URL (?join=CODE)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const joinCode = params.get('join');
-    if (joinCode && user && !household) {
-      joinHouseholdByCode(joinCode).then((res) => {
-        if (res.success) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      });
-    }
-  }, [user, household]);
-
   const createHousehold = async (name: string, city: string = ''): Promise<Household> => {
     const cleanName = name.trim();
     if (!cleanName) throw new Error('El nombre del hogar es obligatorio');
@@ -232,7 +248,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         created_at: new Date().toISOString(),
       };
       setHousehold(newHh);
-      setCurrentPlan('free');
+      setCurrentPlan(ACCESS_MODE === 'open' ? 'base' : 'free');
       localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(newHh));
       if (user) {
         setMembers([
@@ -240,8 +256,8 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             id: `m_${Date.now()}`,
             household_id: newHh.id,
             user_id: user.id,
-            role: 'admin',
-            display_name: user.displayName || 'Administrador',
+            role: 'owner',
+            display_name: user.displayName || 'Propietario',
             joined_at: newHh.created_at,
           },
         ]);
@@ -265,8 +281,8 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           await supabase.from('household_members').insert({
             household_id: data.id,
             user_id: user.id,
-            role: 'admin',
-            display_name: user.displayName || 'Administrador',
+            role: 'owner',
+            display_name: user.displayName || 'Propietario',
           });
         }
 
@@ -281,6 +297,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         setHousehold(data);
         localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(data));
+        await fetchMembers(data.id);
         await fetchLicense(data.id);
         return data;
       }
@@ -346,6 +363,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         setHousehold(targetHh);
         localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(targetHh));
+        await fetchMembers(targetHh.id);
         await fetchLicense(targetHh.id);
         return { success: true, message: `¡Te uniste a ${targetHh.name} con éxito!` };
       }
@@ -354,6 +372,181 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     return { success: false, message: 'Código de invitación no encontrado o inválido' };
+  };
+
+  // Creación de link de invitación criptográfico (solo dueño, 128-bit hash)
+  const createInviteLink = async (options?: { maxUses?: number; expiresDays?: number; requiresApproval?: boolean }): Promise<{ success: boolean; inviteUrl?: string; error?: string }> => {
+    if (!household) return { success: false, error: 'No hay hogar activo' };
+
+    try {
+      // 128 bits de entropía criptográfica (16 bytes = 32 caracteres hex)
+      const randomBytes = new Uint8Array(16);
+      crypto.getRandomValues(randomBytes);
+      const rawToken = Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const tokenHash = await sha256Hex(rawToken.toLowerCase());
+
+      if (!isConfigured || isDemoMode) {
+        const inviteUrl = `${window.location.origin}?invite=${rawToken}`;
+        return { success: true, inviteUrl };
+      }
+
+      const { data, error } = await supabase.rpc('create_household_invitation', {
+        p_household_id: household.id,
+        p_token_hash: tokenHash,
+        p_expires_days: options?.expiresDays || 7,
+        p_max_uses: options?.maxUses || 1,
+        p_requires_approval: options?.requiresApproval || false,
+      });
+
+      if (error) return { success: false, error: error.message };
+      const inviteUrl = `${window.location.origin}?invite=${rawToken}`;
+      return { success: true, inviteUrl };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al generar link de invitación' };
+    }
+  };
+
+  // Previsualización de invitación
+  const previewInvite = async (rawToken: string): Promise<{ valid: boolean; householdId?: string; householdName?: string; householdCity?: string; requiresApproval?: boolean; error?: string }> => {
+    try {
+      const cleanToken = rawToken.trim().toLowerCase();
+      const tokenHash = await sha256Hex(cleanToken);
+
+      if (!isConfigured || isDemoMode) {
+        return { valid: true, householdName: 'Hogar Compartido', requiresApproval: false };
+      }
+
+      const { data, error } = await supabase.rpc('preview_household_invitation', {
+        p_token_hash: tokenHash,
+      });
+
+      if (error) return { valid: false, error: error.message };
+      if (!data || !data.valid) return { valid: false, error: data?.error || 'Invitación no válida' };
+      return {
+        valid: true,
+        householdId: data.household_id,
+        householdName: data.household_name,
+        householdCity: data.household_city,
+        requiresApproval: data.requires_approval,
+      };
+    } catch (err: any) {
+      return { valid: false, error: err.message || 'Error validando invitación' };
+    }
+  };
+
+  // Confirmar y unirse mediante token de invitación
+  const joinByInvite = async (rawToken: string): Promise<{ success: boolean; householdId?: string; householdName?: string; alreadyMember?: boolean; pendingApproval?: boolean; error?: string }> => {
+    try {
+      const cleanToken = rawToken.trim().toLowerCase();
+      const tokenHash = await sha256Hex(cleanToken);
+
+      if (!isConfigured || isDemoMode) {
+        return { success: true, householdName: 'Hogar Compartido' };
+      }
+
+      const { data, error } = await supabase.rpc('join_household_via_invitation', {
+        p_token_hash: tokenHash,
+      });
+
+      if (error) return { success: false, error: error.message };
+      if (!data || !data.success) return { success: false, error: data?.error || 'No fue posible unirse al hogar' };
+
+      if (data.household_id) {
+        const { data: hhData } = await supabase
+          .from('households')
+          .select('*')
+          .eq('id', data.household_id)
+          .single();
+        if (hhData) {
+          setHousehold(hhData);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(hhData));
+          await fetchLicense(hhData.id);
+          await fetchMembers(hhData.id);
+        }
+      }
+
+      return {
+        success: true,
+        householdId: data.household_id,
+        householdName: data.household_name,
+        alreadyMember: data.already_member,
+        pendingApproval: data.pending_approval,
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al procesar unión al hogar' };
+    }
+  };
+
+  // Remover integrante del hogar (solo dueño)
+  const removeMember = async (memberUserId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!household) return { success: false, error: 'No hay hogar activo' };
+    if (!isConfigured || isDemoMode) {
+      setMembers((prev) => prev.filter((m) => m.user_id !== memberUserId));
+      return { success: true };
+    }
+    try {
+      const { data, error } = await supabase.rpc('remove_household_member', {
+        p_household_id: household.id,
+        p_target_user_id: memberUserId,
+      });
+      if (error) return { success: false, error: error.message };
+      if (data && !data.success) return { success: false, error: data.error };
+      await fetchMembers(household.id);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al remover integrante' };
+    }
+  };
+
+  // Canjear código de acceso para crear hogar con licencia
+  const redeemAccessCode = async (code: string, householdName: string = 'Mi Hogar', city?: string): Promise<{ success: boolean; householdId?: string; planId?: PlanType; error?: string }> => {
+    try {
+      const cleanCode = code.trim().toUpperCase();
+      const codeHash = await sha256Hex(cleanCode);
+
+      if (!isConfigured || isDemoMode) {
+        const mockHh: Household = {
+          id: `hh_code_${Date.now()}`,
+          name: householdName,
+          invite_code: 'CODEOK',
+          currency: 'ARS',
+          monthly_chef_limit: 40,
+          chef_queries_used_month: 0,
+          created_at: new Date().toISOString(),
+        };
+        setHousehold(mockHh);
+        setCurrentPlan('base');
+        localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(mockHh));
+        return { success: true, householdId: mockHh.id, planId: 'base' };
+      }
+
+      const { data, error } = await supabase.rpc('redeem_access_code', {
+        p_code_hash: codeHash,
+        p_household_name: householdName,
+        p_city: city || null,
+      });
+
+      if (error) return { success: false, error: error.message };
+      if (!data || !data.success) return { success: false, error: data?.error || 'Código inválido o ya utilizado' };
+
+      if (data.household_id) {
+        const { data: hhData } = await supabase
+          .from('households')
+          .select('*')
+          .eq('id', data.household_id)
+          .single();
+        if (hhData) {
+          setHousehold(hhData);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(hhData));
+          await fetchLicense(hhData.id);
+          await fetchMembers(hhData.id);
+        }
+      }
+
+      return { success: true, householdId: data.household_id, planId: data.plan_id };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al canjear código' };
+    }
   };
 
   const getWhatsAppInviteUrl = (): string => {
@@ -381,15 +574,28 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [household, fetchLicense]);
 
+  const refreshMembers = useCallback(async () => {
+    if (household) {
+      await fetchMembers(household.id);
+    }
+  }, [household, fetchMembers]);
+
   const planLimits: Record<PlanType, number> = {
-    free: 5,
+    free: TRIAL_CREDITS > 0 ? TRIAL_CREDITS : 0,
     base: 40,
     premium: 150,
+    tester: 9999,
   };
 
-  const effectiveLimit = planLimits[currentPlan] || 5;
+  const effectiveLimit = planLimits[currentPlan] ?? 0;
   const remainingQueries = Math.max(0, effectiveLimit - chefUsedThisMonth);
-  const isPremium = currentPlan === 'premium';
+  const isPremium = currentPlan === 'premium' || currentPlan === 'tester';
+  const hasActiveLicense = ACCESS_MODE === 'open' || ['base', 'premium', 'tester'].includes(currentPlan);
+  const isOwner = Boolean(
+    (user?.id && members.some((m) => m.user_id === user.id && m.role === 'owner')) ||
+    (user?.id && household?.created_by === user.id) ||
+    (isDemoMode && Boolean(household))
+  );
 
   const updateHouseholdSettings = useCallback(
     async (settings: Partial<Household>): Promise<Household> => {
@@ -440,12 +646,20 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         loading,
         remainingQueries,
         currentPlan,
+        hasActiveLicense,
+        isOwner,
         isPremium,
         createHousehold,
         joinHouseholdByCode,
         getWhatsAppInviteUrl,
+        createInviteLink,
+        previewInvite,
+        joinByInvite,
+        removeMember,
+        redeemAccessCode,
         incrementChefUsage,
         refreshLicense,
+        refreshMembers,
         updateHouseholdSettings,
       }}
     >

@@ -238,13 +238,49 @@ npx supabase migration apply --file supabase/migrations/20261012_ronda5_settings
 #### Opción 2: Desde el Editor SQL de Supabase (Web)
 1. Entrá a tu proyecto en [https://supabase.com](https://supabase.com) -> **SQL Editor** -> **New Query**.
 2. Copiá y ejecutá el contenido de:
-   - `supabase/migrations/20261012_ronda5_cache_purge.sql`
-   - `supabase/migrations/20261012_ronda5_settings_and_preferences.sql`
+   - `supabase/migrations/20261012_ronda5_cache_purge.sql` (vaciado de caché vieja)
+   - `supabase/migrations/20261012_ronda5_settings_and_preferences.sql` (persistencia y preferencias)
+   - `supabase/migrations/20261012_ronda5_access_control.sql` (control de acceso, códigos, invitaciones 128-bit y límites de plan)
 3. Hacé click en **"Run"**.
 
 ---
 
-### B. SQL para borrar datos de prueba y comenzar de cero (Editor SQL de Supabase)
+### B. Generación de Códigos de Acceso para Compradores y Familiares
+
+Para generar un código de acceso canjeable que crea un hogar con licencia activa:
+
+```bash
+# Generar código para Plan Base (1 solo uso, sin vencimiento):
+npx tsx scripts/create-access-code.ts --plan base --uses 1
+
+# Generar código para Plan Premium con vencimiento a 30 días:
+npx tsx scripts/create-access-code.ts --plan premium --uses 1 --days 30 --notes "Familiar"
+
+# Generar un código con texto personalizado:
+npx tsx scripts/create-access-code.ts --plan base --code COMPARS-REGALO-2026
+```
+
+El script imprimirá el código en pantalla (ej: `COMPARS-BASE-7X9K2M`) para que lo compartas con el usuario, y guardará únicamente su hash criptográfico SHA-256 en la base de datos.
+
+---
+
+### C. Asignación del Plan Interno "Tester" (Solo Service Role)
+
+Para probar sin límites de consultas ni cuotas mensuales:
+
+```bash
+# Por ID del hogar:
+npx tsx scripts/assign-tester-plan.ts --household-id "TU-HOUSEHOLD-UUID"
+
+# O por correo electrónico del usuario:
+npx tsx scripts/assign-tester-plan.ts --email "tu-email@gmail.com"
+```
+
+El plan `tester` otorga 9999 consultas/mes, capacidad de hasta 99 integrantes y acceso completo al Menú Semanal con IA.
+
+---
+
+### D. SQL para borrar datos de prueba y comenzar de cero (Editor SQL de Supabase)
 
 Si querés reiniciar tu base de datos remota para empezar 100% limpia sin usuarios de prueba, hogares ni datos residuales de rondas anteriores, ejecutá este script en el **SQL Editor** de Supabase (este script **NO** se ejecuta automáticamente; solo vos decidís cuándo correrlo):
 
@@ -264,16 +300,22 @@ DELETE FROM public.ai_cache;
 -- 3. Vaciar notificaciones push
 DELETE FROM public.push_subscriptions;
 
--- 4. Vaciar pagos, licencias y suscripciones
+-- 4. Vaciar códigos de acceso, canjes e invitaciones
+DELETE FROM public.access_code_redemptions;
+DELETE FROM public.access_codes;
+DELETE FROM public.household_invitations;
+DELETE FROM public.invite_attempt_logs;
+
+-- 5. Vaciar pagos, licencias y suscripciones
 DELETE FROM public.payments;
 DELETE FROM public.household_licenses;
 DELETE FROM public.licenses;
 
--- 5. Vaciar ajustes y preferencias
+-- 6. Vaciar ajustes y preferencias
 DELETE FROM public.household_settings;
 DELETE FROM public.user_preferences;
 
--- 6. Vaciar miembros y hogares
+-- 7. Vaciar miembros y hogares
 DELETE FROM public.household_members;
 DELETE FROM public.households;
 
@@ -285,3 +327,4 @@ DELETE FROM public.households;
 
 ## ¿Dudas o Soporte?
 Cualquier cambio de recetas, ingredientes patagónicos o ajustes de vocabulario se pueden consultar y modificar en la skill `.agents/skills/chef-ia/SKILL.md` y en las decisiones de diseño en `docs/DECISIONES.md`.
+

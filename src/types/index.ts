@@ -77,16 +77,40 @@ export interface HouseholdMember {
   id: string;
   household_id: string;
   user_id: string;
-  role: 'admin' | 'member';
+  role: 'owner' | 'admin' | 'member';
   display_name: string;
   joined_at: string;
+}
+
+export interface PlanDefinition {
+  id: string;
+  name: string;
+  price_usd: number;
+  monthly_chef_queries: number;
+  max_members: number;
+  features: Record<string, any>;
+  is_active: boolean;
+}
+
+export interface HouseholdInvitation {
+  id: string;
+  household_id: string;
+  token_hash: string;
+  expires_at: string;
+  max_uses: number;
+  times_used: number;
+  is_revoked: boolean;
+  requires_owner_approval: boolean;
+  created_at: string;
+  created_by?: string | null;
 }
 
 export interface HouseholdLicense {
   id: string;
   household_id: string;
-  plan_type: 'free' | 'lifetime_premium';
+  plan_type: 'free' | 'base' | 'premium' | 'tester';
   status: 'active' | 'expired' | 'canceled';
+
   purchased_at?: string | null;
   amount_paid_usd?: number | null;
   amount_paid_ars?: number | null;
