@@ -218,6 +218,22 @@ export const DetalleDiaMenuResponseSchema = z.object({
   advertencias: z.array(z.string()).default([]),
 });
 
+export const RegenerarPlatoResponseSchema = z.object({
+  modo: z.literal('regenerar_plato'),
+  fuera_de_tema: z.boolean().default(false),
+  mensaje: z.string().nullable().default(null),
+  comida: z.object({
+    tipo: MealTypeEnum,
+    plato: z.string(),
+    bebida: z.string().nullable().optional(),
+    por_que_encaja: z.string(),
+    pasos: z.array(z.string()).default([]),
+    ingredientes: z.array(ChefIngredientSchema).default([]),
+  }),
+  advertencias: z.array(z.string()).default([]),
+  origen: z.enum(['ia', 'cache', 'demo']).optional().default('ia'),
+});
+
 export type CookResponse = z.infer<typeof CookResponseSchema>;
 export type SuggestResponse = z.infer<typeof SuggestResponseSchema>;
 export type InterpretPantryResponse = z.infer<typeof InterpretPantryResponseSchema>;
@@ -227,4 +243,5 @@ export type MenuItemMeal = z.infer<typeof MenuItemMealSchema>;
 export type MenuDay = z.infer<typeof MenuDaySchema>;
 export type PlanificarSemanaResponse = z.infer<typeof PlanificarSemanaResponseSchema>;
 export type PlanificarSemanaMeal = z.infer<typeof PlanificarSemanaMealSchema>;
+export type RegenerarPlatoResponse = z.infer<typeof RegenerarPlatoResponseSchema>;
 

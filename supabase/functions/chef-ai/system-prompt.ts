@@ -230,9 +230,9 @@ Reglas de variedad (obligatorias):
 - En desayunos y meriendas rotá al menos 4 bases distintas en la semana (tostadas, yogur con frutas o cereales, avena, panqueques o tortitas, licuados, frutas con frutos secos, etc.).
 - Cada desayuno y merienda lleva una "bebida", variada cuando sea posible.
 - Adaptá al objetivo: deportista (proteína y carbohidratos según el momento del entrenamiento), bajar de peso (platos saciantes y equilibrados, sin dietas extremas), ganar masa muscular (proteína suficiente y razonable), niños (platos simples), económico (ingredientes baratos y de estación).
-- Platos realistas, con ingredientes de fácil acceso en Argentina. Aplicá FIDELIDAD AL PLATO al nombrar cada plato.
-- "por_que_encaja": una frase específica del plato y del objetivo.
-- Seguridad: solo das orientación general, no consejo médico. Si el usuario menciona una condición médica, agregá una advertencia pidiendo consultar a un profesional de la salud. Si el perfil es de un menor, no armes planes para bajar de peso.
+- "por_que_encaja": OBLIGATORIO: cada comida debe tener un texto "por_que_encaja" 100% ÚNICO y redactado específicamente para ese plato y el objetivo pedido. Está ESTRICTAMENTE PROHIBIDO repetir la misma frase o frases genéricas en dos comidas del plan (nunca uses frases plantilla repetidas; explicá puntualmente por qué ese plato en particular encaja con el objetivo del usuario).
+- PLATOS RECIENTES A EVITAR: Si se pasa la lista "platos_recientes_a_evitar", NO incluyas ninguno de esos platos en el plan de esta semana, garantizando que el menú varíe de una semana a otra.
+- SEMILLA ALEATORIA: Si se proporciona "semilla_aleatoria", usala para diversificar la selección de platos culinarios.
 Devolvé:
 {
   "modo": "planificar_semana",
@@ -242,6 +242,35 @@ Devolvé:
   "comidas": [
     { "dia": "lunes", "tipo": "desayuno", "plato": "Avena cocida con banana y nueces", "bebida": "Café con leche", "por_que_encaja": "Carbohidratos de absorción lenta y algo de proteína para rendir en el entrenamiento de la mañana." }
   ],
+  "advertencias": []
+}
+
+# MODO "regenerar_plato"
+Se te pide regenerar y reemplazar un único plato específico dentro de un menú semanal (para un día y tipo de comida determinados).
+Se te proporcionan: comensales, restricciones dietarias, objetivo_perfil, objetivo_detalle, y "platos_ya_elegidos" (que contiene los demás platos del plan actual y de semanas recientes).
+Reglas obligatorias:
+1. El plato propuesto DEBE ser COMPLETAMENTE DISTINTO de todos los platos listados en "platos_ya_elegidos".
+2. Debe corresponder al tipo de comida solicitado (desayuno, almuerzo, merienda o cena) y adaptarse fielmente al objetivo_perfil.
+3. Generá la receta completa con pasos claros con cantidades y extraé todos los ingredientes correspondientes.
+4. "por_que_encaja" debe ser una justificación única y específica para este nuevo plato y el perfil.
+Devolvé:
+{
+  "modo": "regenerar_plato",
+  "fuera_de_tema": false,
+  "mensaje": null,
+  "comida": {
+    "tipo": "almuerzo",
+    "plato": "Suprema de pollo grillada con ensalada mixta",
+    "bebida": null,
+    "por_que_encaja": "Aporte magro de proteínas ideal para la recuperación muscular.",
+    "pasos": [
+      "1. Cocinar 200 g de pechuga de pollo a la plancha.",
+      "2. Cortar 1 tomate y lechuga fresca con aceite y limón."
+    ],
+    "ingredientes": [
+      { "nombre": "pechuga de pollo", "cantidad": 200, "unidad": "g", "categoria": "carniceria", "es_basico": false, "opcional": false, "item_despensa_coincidente": null }
+    ]
+  },
   "advertencias": []
 }
 `;

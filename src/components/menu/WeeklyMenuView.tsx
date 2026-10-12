@@ -53,7 +53,13 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   onAddIngredientsToShoppingList,
 }) => {
   const { isPremium, remainingQueries } = useHousehold();
-  const { generateWeeklyMenu, loading: isGeneratingAi, error, isAiDemoMode } = useChefAi();
+  const {
+    generateWeeklyMenu,
+    regenerateSingleMeal,
+    loading: isGeneratingAi,
+    error,
+    isAiDemoMode,
+  } = useChefAi();
 
   // Configuración de comidas por día (Lunes a Domingo)
   const [daySelections, setDaySelections] = useState<Record<string, MealType[]>>({
@@ -76,6 +82,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   const [generatedMenu, setGeneratedMenu] = useState<ChefMenuResponse | null>(null);
   const [unifiedComparisons, setUnifiedComparisons] = useState<DiscountComparisonResult[] | null>(null);
   const [editingMeal, setEditingMeal] = useState<{ dayIndex: number; mealIndex: number; name: string } | null>(null);
+  const [regeneratingMealKey, setRegeneratingMealKey] = useState<string | null>(null);
 
   // Atajos para selección masiva
   const handleSelectAllMealsAllDays = () => {
@@ -136,6 +143,30 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
       setUnifiedComparisons(comparisons);
     } catch (e: any) {
       console.error('Error generando menú:', e);
+    }
+  };
+
+  // Regenerar un plato puntual con IA (Ronda 5 Bloque 2)
+  const handleRegenerateMeal = async (dayIndex: number, mealIndex: number) => {
+    if (!generatedMenu) return;
+    const key = `${dayIndex}-${mealIndex}`;
+    setRegeneratingMealKey(key);
+    try {
+      const { updatedMenu, updatedComparisons } = await regenerateSingleMeal({
+        dayIndex,
+        mealIndex,
+        currentMenu: generatedMenu,
+        targetProfile,
+        profileDetail,
+        persons,
+        pantry: pantryItems,
+      });
+      setGeneratedMenu(updatedMenu);
+      setUnifiedComparisons(updatedComparisons);
+    } catch (e: any) {
+      console.error('Error al regenerar plato:', e);
+    } finally {
+      setRegeneratingMealKey(null);
     }
   };
 
@@ -260,10 +291,20 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
 
           {/* Días y comidas planificadas */}
           <div className="space-y-2.5">
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center justify-between">
-              <span>Platos Planificados por Día</span>
-              <span className="text-xs text-slate-400 font-normal">Toca para editar</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                Platos Planificados por Día
+              </h3>
+              <button
+                onClick={handleGenerate}
+                disabled={isGeneratingAi || Boolean(regeneratingMealKey)}
+                className="px-2.5 py-1 text-xs font-bold rounded-xl bg-patagonia-50 hover:bg-patagonia-100 dark:bg-patagonia-950/60 dark:hover:bg-patagonia-900/60 text-patagonia-700 dark:text-patagonia-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                title="Regenerar la semana completa con IA"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isGeneratingAi ? 'animate-spin' : ''}`} />
+                <span>Regenerar semana</span>
+              </button>
+            </div>
 
             {generatedMenu.dias.map((diaObj, dIdx) => (
               <div
@@ -340,19 +381,35 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                         </div>
 
                         {!isEditing && (
-                          <button
-                            onClick={() =>
-                              setEditingMeal({
-                                dayIndex: dIdx,
-                                mealIndex: mIdx,
-                                name: comida.nombre,
-                              })
-                            }
-                            className="p-1.5 text-slate-400 hover:text-patagonia-600 rounded-lg transition-colors flex-shrink-0"
-                            title="Reemplazar plato"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => handleRegenerateMeal(dIdx, mIdx)}
+                              disabled={Boolean(regeneratingMealKey) || isGeneratingAi}
+                              className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg transition-colors disabled:opacity-40"
+                              title="Regenerar este plato con IA"
+                            >
+                              <RotateCcw
+                                className={`w-3.5 h-3.5 ${
+                                  regeneratingMealKey === `${dIdx}-${mIdx}`
+                                    ? 'animate-spin text-amber-500'
+                                    : ''
+                                }`}
+                              />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setEditingMeal({
+                                  dayIndex: dIdx,
+                                  mealIndex: mIdx,
+                                  name: comida.nombre,
+                                })
+                              }
+                              className="p-1.5 text-slate-400 hover:text-patagonia-600 rounded-lg transition-colors"
+                              title="Editar nombre manualmente"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     );

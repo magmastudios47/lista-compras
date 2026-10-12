@@ -10,6 +10,7 @@ import {
   MenuResponseSchema,
   PlanificarSemanaResponseSchema,
   DetalleDiaMenuResponseSchema,
+  RegenerarPlatoResponseSchema,
 } from '../_shared/schemas.ts';
 import {
   filterAbsurdIngredients,
@@ -72,9 +73,26 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { modo, pedido, personas, restricciones, despensa, texto_despensa, household_id, dias_config, objetivo_perfil, objetivo_detalle, platos_obligatorios, platos_ya_elegidos } = body;
+    const {
+      modo,
+      pedido,
+      personas,
+      restricciones,
+      despensa,
+      texto_despensa,
+      household_id,
+      dias_config,
+      objetivo_perfil,
+      objetivo_detalle,
+      platos_obligatorios,
+      platos_ya_elegidos,
+      platos_recientes_evitar,
+      semilla,
+      dia,
+      tipo,
+    } = body;
 
-    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'planificar_semana', 'detalle_dia_menu'];
+    const allowedModes = ['cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'planificar_semana', 'detalle_dia_menu', 'regenerar_plato'];
     if (!modo || !allowedModes.includes(modo)) {
       return new Response(
         JSON.stringify({ error: 'Modo inválido.' }),
@@ -85,9 +103,9 @@ serve(async (req: Request) => {
     // 2. Control de Acceso por Plan y Cuota Mensual
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
-    const isMenuMode = modo === 'menu' || modo === 'planificar_semana' || modo === 'detalle_dia_menu';
-    // El detalle por día no descuenta consultas extra porque ya se cobró el menú
-    const queryCost = modo === 'detalle_dia_menu' ? 0 : (isMenuMode ? 3 : 1);
+    const isMenuMode = modo === 'menu' || modo === 'planificar_semana' || modo === 'detalle_dia_menu' || modo === 'regenerar_plato';
+    // El detalle por día no descuenta consultas extra porque ya se cobró el menú; regenerar plato consume 1
+    const queryCost = modo === 'detalle_dia_menu' ? 0 : (modo === 'regenerar_plato' ? 1 : (isMenuMode ? 3 : 1));
 
     if (household_id) {
       // Si es modo menu / planificar_semana, verificar plan Premium
@@ -205,6 +223,7 @@ serve(async (req: Request) => {
     if (modo === 'menu') validator = MenuResponseSchema.parse;
     if (modo === 'planificar_semana') validator = PlanificarSemanaResponseSchema.parse;
     if (modo === 'detalle_dia_menu') validator = DetalleDiaMenuResponseSchema.parse;
+    if (modo === 'regenerar_plato') validator = RegenerarPlatoResponseSchema.parse;
 
     const geminiResult = await gemini.generateChefResponse(
       {
@@ -220,7 +239,10 @@ serve(async (req: Request) => {
           objetivo_detalle,
           platos_obligatorios,
           platos_ya_elegidos,
-          dia: body.dia,
+          platos_recientes_evitar,
+          semilla,
+          dia,
+          tipo,
           comidas: body.comidas,
         },
       },
@@ -323,6 +345,10 @@ serve(async (req: Request) => {
         const validated = validateIngredientsAgainstSteps(c.pasos || [], filtered);
         return { ...c, ingredientes: validated };
       });
+    } else if (modo === 'regenerar_plato' && outputData.comida) {
+      const filtered = filterAbsurdIngredients(outputData.comida.plato, outputData.comida.ingredientes || []);
+      const validated = validateIngredientsAgainstSteps(outputData.comida.pasos || [], filtered);
+      outputData.comida.ingredientes = validated;
     }
 
     // Establecer origen de la respuesta

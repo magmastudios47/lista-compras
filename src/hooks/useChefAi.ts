@@ -23,6 +23,7 @@ import { processHandwrittenText } from '../lib/textPipeline';
 import { filterAbsurdIngredients, validateIngredientsAgainstSteps } from '../lib/culinarySanityCheck';
 import { normalizeString } from '../lib/normalizer';
 import { validateWeeklyPlanVariety } from '../lib/weeklyMenuValidator';
+import { getRecentHouseholdDishes, saveHouseholdMenuHistory } from '../lib/weeklyMenuHistory';
 
 export const isAiDemoMode =
   typeof import.meta !== 'undefined' &&
@@ -334,6 +335,8 @@ export function useChefAi() {
                 personas: p,
                 platos_obligatorios: params.mandatoryDishes,
                 household_id: household.id,
+                semilla: `${Date.now()}_${Math.random()}`,
+                platos_recientes_evitar: getRecentHouseholdDishes(household.id),
               },
             });
 
@@ -454,7 +457,121 @@ export function useChefAi() {
         const merged = mergeDuplicateIngredients(allIngredients);
         const comparisons = calculatePantryDiscounts(merged, params.pantry);
 
+        if (household) {
+          const allDishNames = menuData.dias.flatMap((d) => d.comidas.map((c) => c.nombre));
+          saveHouseholdMenuHistory(household.id, allDishNames);
+        }
+
         return { response: menuData, comparisons };
+      } catch (err: any) {
+        const msg = formatFriendlyAiError(err);
+        setError(msg);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [household, incrementChefUsage]
+  );
+
+  // Regenerar un plato puntual del menú semanal (Ronda 5 Bloque 2)
+  const regenerateSingleMeal = useCallback(
+    async (params: {
+      dayIndex: number;
+      mealIndex: number;
+      currentMenu: ChefMenuResponse;
+      targetProfile: string;
+      profileDetail?: string;
+      persons?: number;
+      pantry: PantryItem[];
+    }): Promise<{
+      updatedMenu: ChefMenuResponse;
+      updatedComparisons: DiscountComparisonResult[];
+    }> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const dayObj = params.currentMenu.dias[params.dayIndex];
+        const targetMeal = dayObj?.comidas[params.mealIndex];
+        if (!dayObj || !targetMeal) {
+          throw new Error('Comida no encontrada en el menú.');
+        }
+
+        const p = params.persons || 4;
+        const otherDishesInWeek = params.currentMenu.dias
+          .flatMap((d) => d.comidas.map((c) => c.nombre))
+          .filter((n) => normalizeString(n) !== normalizeString(targetMeal.nombre));
+
+        const recentHistory = household ? getRecentHouseholdDishes(household.id) : [];
+        const allDishesToAvoid = Array.from(new Set([...otherDishesInWeek, ...recentHistory]));
+
+        let replacementMeal: MenuItemMeal;
+
+        if (isConfigured && household) {
+          try {
+            const { data, error: invokeErr } = await supabase.functions.invoke('chef-ai', {
+              body: {
+                modo: 'regenerar_plato',
+                dia: dayObj.dia,
+                tipo: targetMeal.tipo,
+                platos_ya_elegidos: allDishesToAvoid,
+                objetivo_perfil: params.targetProfile,
+                objetivo_detalle: params.profileDetail,
+                personas: p,
+                household_id: household.id,
+              },
+            });
+
+            if (!invokeErr && data?.comida) {
+              incrementChefUsage();
+              replacementMeal = {
+                tipo: data.comida.tipo,
+                nombre: data.comida.plato,
+                bebida: data.comida.bebida || null,
+                porciones: p,
+                por_que_encaja: data.comida.por_que_encaja,
+                pasos: data.comida.pasos || [],
+                ingredientes: data.comida.ingredientes || [],
+              };
+            } else {
+              if (!isAiDemoMode) {
+                throw new Error(formatFriendlyAiError(invokeErr || 'No se pudo regenerar el plato.'));
+              }
+              replacementMeal = generateMockReplacementMeal(targetMeal.tipo, allDishesToAvoid, p);
+            }
+          } catch (fnErr) {
+            if (!isAiDemoMode) {
+              throw fnErr;
+            }
+            replacementMeal = generateMockReplacementMeal(targetMeal.tipo, allDishesToAvoid, p);
+          }
+        } else {
+          if (!isAiDemoMode) {
+            throw new Error('Debés seleccionar o unirte a un hogar para consultar al Chef.');
+          }
+          replacementMeal = generateMockReplacementMeal(targetMeal.tipo, allDishesToAvoid, p);
+        }
+
+        // Crear copia inmutable del menú con el plato reemplazado
+        const updatedDays = params.currentMenu.dias.map((d, dIdx) => {
+          if (dIdx !== params.dayIndex) return d;
+          return {
+            ...d,
+            comidas: d.comidas.map((c, mIdx) => (mIdx === params.mealIndex ? replacementMeal : c)),
+          };
+        });
+
+        const updatedMenu: ChefMenuResponse = {
+          ...params.currentMenu,
+          dias: updatedDays,
+        };
+
+        const allIngredients = updatedMenu.dias.flatMap((d) => d.comidas.flatMap((c) => c.ingredientes));
+        const merged = mergeDuplicateIngredients(allIngredients);
+        const updatedComparisons = calculatePantryDiscounts(merged, params.pantry);
+
+        return { updatedMenu, updatedComparisons };
       } catch (err: any) {
         const msg = formatFriendlyAiError(err);
         setError(msg);
@@ -474,6 +591,7 @@ export function useChefAi() {
     interpretItems,
     interpretPantry,
     generateWeeklyMenu,
+    regenerateSingleMeal,
     remainingQueries,
     isAiDemoMode,
   };
@@ -482,6 +600,77 @@ export function useChefAi() {
 // ========================================================================
 // GENERADORES DEMO / OFFLINE REALISTAS PARA ARGENTINA
 // ========================================================================
+
+export function generateMockReplacementMeal(
+  tipo: MealType,
+  dishesToAvoid: string[],
+  persons: number
+): MenuItemMeal {
+  const normAvoid = dishesToAvoid.map((d) => normalizeString(d));
+  const candidatePool: Array<{ name: string; pasos: string[]; ingredientes: ChefIngredient[]; why: string }> = [
+    {
+      name: 'Suprema de pollo a la plancha con puré de calabaza',
+      why: 'Proteína magra de alta asimilación con carbohidratos complejos de fácil digestión.',
+      pasos: ['Dorar la pechuga de pollo a fuego medio.', 'Hervir y pisar la calabaza con manteca y leche.'],
+      ingredientes: [
+        { nombre: 'pechuga de pollo', cantidad: persons * 200, unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'zapallo anco', cantidad: persons * 250, unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+    },
+    {
+      name: 'Bife de cuadril a la plancha con ensalada criolla',
+      why: 'Aporte de hierro hemínico y vegetales frescos con antioxidantes.',
+      pasos: ['Cocinar los bifes a fuego fuerte en plancha bien caliente.', 'Picar tomate, cebolla y morrón para la ensalada.'],
+      ingredientes: [
+        { nombre: 'bife de cuadril', cantidad: persons * 200, unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tomate', cantidad: persons, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'cebolla', cantidad: 1, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+    },
+    {
+      name: 'Filet de merluza al limón con papas al vapor',
+      why: 'Pescado blanco magro con bajo contenido graso y papas reconfortantes.',
+      pasos: ['Cocinar los filetes de merluza con jugo de limón en sartén tapada.', 'Hervir las papas en cubos.'],
+      ingredientes: [
+        { nombre: 'merluza', cantidad: persons * 200, unidad: 'g', categoria: 'carniceria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'papa', cantidad: persons * 200, unidad: 'g', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+    },
+    {
+      name: 'Guiso de lentejas con vegetales de estación',
+      why: 'Fuente vegetal de fibra, minerales y energía sostenida para la familia.',
+      pasos: ['Saltear cebolla, morrón y zanahoria.', 'Sumar las lentejas y cocinar a fuego lento con salsa de tomate.'],
+      ingredientes: [
+        { nombre: 'lentejas', cantidad: persons * 80, unidad: 'g', categoria: 'almacen', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'zanahoria', cantidad: persons, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+    },
+    {
+      name: 'Tarta de zapallitos y queso',
+      why: 'Plato liviano y rendidor rico en agua y calcio.',
+      pasos: ['Saltear los zapallitos y mezclar con huevos batidos y queso.', 'Volcar en masa de tarta y hornear.'],
+      ingredientes: [
+        { nombre: 'zapallito', cantidad: persons * 2, unidad: 'unidad', categoria: 'verduleria', es_basico: false, opcional: false, item_despensa_coincidente: null },
+        { nombre: 'tapa de tarta', cantidad: 1, unidad: 'paquete', categoria: 'panaderia', es_basico: false, opcional: false, item_despensa_coincidente: null },
+      ],
+    },
+  ];
+
+  const pick =
+    candidatePool.find(
+      (c) => !normAvoid.some((a) => a.includes(normalizeString(c.name)) || normalizeString(c.name).includes(a))
+    ) || candidatePool[0];
+
+  return {
+    tipo,
+    nombre: pick.name,
+    bebida: tipo === 'desayuno' || tipo === 'merienda' ? 'Infusión' : null,
+    porciones: persons,
+    por_que_encaja: pick.why,
+    pasos: pick.pasos,
+    ingredientes: pick.ingredientes,
+  };
+}
 
 export function generateMockCookResponse(
   mealRequest: string,

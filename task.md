@@ -150,12 +150,12 @@
   - [x] Validador de cobertura del pedido (productos nombrados deben estar en ingredientes salvo "sin X", reintento único, sin cobro si falla)
   - [x] Suite de pruebas de regresión culinaria con IA real (>=12 pedidos variados, test anti-duplicados y anti-arroz genérico)
   - [x] Pruebas end-to-end en navegador (cocinar y sugerir) y reporte en `docs/chef-quality-report.md`
-- [ ] **Bloque 2: Menú Semanal Sin Repeticiones**
-  - [ ] Corrección de causa raíz de Bug B (validadores de variedad sobre resultado final, interfaz sin relleno ni reciclado)
-  - [ ] Semilla aleatoria por pedido, histórico de últimos 2 menús a evitar
-  - [ ] `por_que_encaja` único por plato y objetivo (error si hay textos idénticos)
-  - [ ] Funciones "Regenerar este plato" y "Regenerar la semana" con débito de créditos
-  - [ ] Pruebas con IA real (Deportista 7 días sin repetición, perfiles distintos, histórico de hogar, aviso único, medición de tokens/llamadas)
+- [x] **Bloque 2: Menú Semanal Sin Repeticiones**
+  - [x] Corrección de causa raíz de Bug B (validadores de variedad sobre resultado final, interfaz sin relleno ni reciclado)
+  - [x] Semilla aleatoria por pedido, histórico de últimos 2 menús a evitar
+  - [x] `por_que_encaja` único por plato y objetivo (error si hay textos idénticos)
+  - [x] Funciones "Regenerar este plato" y "Regenerar la semana" con débito de créditos
+  - [x] Pruebas con IA real (Deportista 7 días sin repetición, perfiles distintos, histórico de hogar, aviso único, medición de tokens/llamadas)
 - [ ] **Bloque 3: Configuración que se Guarda y Arranque desde Cero**
   - [ ] Persistencia automática con debounce (~500ms), indicador "Guardado" y soporte offline (`user_preferences` y `household_settings` con RLS)
   - [ ] Arranque desde cero: eliminación de datos predeterminados (Facundo, Junín, sesión predeterminada), nuevo flujo de ingreso/creación de hogar

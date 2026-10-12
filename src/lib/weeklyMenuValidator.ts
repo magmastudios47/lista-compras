@@ -187,6 +187,23 @@ export function validateWeeklyPlanVariety(
     }
   }
 
+  // 4. REGLA 4: por_que_encaja debe ser único y específico por plato (Ronda 5 Bloque 2)
+  const seenPorQueEncaja = new Set<string>();
+  for (const m of comidas as any[]) {
+    if (m.por_que_encaja) {
+      const normText = normalizeString(m.por_que_encaja);
+      if (normText.length > 5) {
+        if (seenPorQueEncaja.has(normText)) {
+          errors.push(
+            `El texto "por_que_encaja" ("${m.por_que_encaja}") está repetido en el plan. Cada plato debe tener una justificación única adaptada al objetivo.`
+          );
+          break;
+        }
+        seenPorQueEncaja.add(normText);
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,

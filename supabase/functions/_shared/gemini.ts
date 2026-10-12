@@ -16,6 +16,8 @@ export interface GeminiCallOptions {
     platos_obligatorios?: string;
     platos_ya_elegidos?: string[];
     ingredientes_obligatorios?: string[];
+    platos_recientes_evitar?: string[];
+    semilla?: number | string;
   };
   thinkingBudget?: number;
 }
@@ -99,6 +101,8 @@ export class GeminiClient {
         platos_obligatorios: options.userData.platos_obligatorios || null,
         platos_ya_elegidos: options.userData.platos_ya_elegidos || null,
         ingredientes_obligatorios: options.userData.ingredientes_obligatorios || null,
+        platos_recientes_a_evitar: options.userData.platos_recientes_evitar || null,
+        semilla_aleatoria: options.userData.semilla || null,
       },
     };
 
