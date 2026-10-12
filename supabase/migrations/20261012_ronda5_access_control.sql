@@ -137,6 +137,15 @@ CREATE TABLE IF NOT EXISTS public.invite_attempt_logs (
 
 CREATE INDEX IF NOT EXISTS idx_invite_attempt_logs_identifier ON public.invite_attempt_logs(identifier, created_at);
 
+ALTER TABLE public.invite_attempt_logs ENABLE ROW LEVEL SECURITY;
+
+-- invite_attempt_logs es una tabla de auditoría interna: nadie accede por API directa (solo service_role o funciones SECURITY DEFINER)
+CREATE POLICY "invite_attempt_logs_internal_only"
+    ON public.invite_attempt_logs
+    FOR ALL
+    USING (false)
+    WITH CHECK (false);
+
 -- ------------------------------------------------------------------------
 -- RPC: create_household_invitation
 -- Solo dueños del hogar pueden crear invitaciones. Invalida invitaciones anteriores.

@@ -11,9 +11,14 @@
 -- Ronda 5 - Migración: Limpieza de ai_cache
 -- Vaciado de la tabla ai_cache para eliminar respuestas obsoletas generadas
 -- con versiones previas del prompt o fallbacks estáticos.
--- ==============================================================================
-
-TRUNCATE TABLE public.ai_cache;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'ai_cache'
+    ) THEN
+        DELETE FROM public.ai_cache;
+    END IF;
+END $$;
 
 
 -- ------------------------------------------------------------------------
@@ -240,6 +245,15 @@ CREATE TABLE IF NOT EXISTS public.invite_attempt_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_invite_attempt_logs_identifier ON public.invite_attempt_logs(identifier, created_at);
+
+ALTER TABLE public.invite_attempt_logs ENABLE ROW LEVEL SECURITY;
+
+-- invite_attempt_logs es una tabla de auditoría interna: nadie accede por API directa (solo service_role o funciones SECURITY DEFINER)
+CREATE POLICY "invite_attempt_logs_internal_only"
+    ON public.invite_attempt_logs
+    FOR ALL
+    USING (false)
+    WITH CHECK (false);
 
 -- ------------------------------------------------------------------------
 -- RPC: create_household_invitation
