@@ -169,15 +169,15 @@
   - [x] Links de invitación con token de 128 bits hasheado, 7 días de validez, tope de integrantes por plan verificado atómicamente y revocación
   - [x] Plan interno "tester" con créditos altos (solo service role); sin licencia = 0 créditos
   - [x] Pruebas de acceso no autorizado, links vencidos/revocados, condición de carrera en tope y RLS
-- [ ] **Bloque 5: Costos, Créditos y Recargas**
-  - [ ] Instrumentación de `ai_usage_log` con tokens de entrada, salida, razonamiento, costo USD, modo, origen y éxito; tabla `ai_pricing` con fecha de vigencia
-  - [ ] Medición real Flash vs Flash-Lite y reasoning bajo vs off en `docs/COSTOS.md`; recomendación por modo y variables de modelo
-  - [ ] Reducción de tokens de entrada (núcleo común + sección por modo, estático primero)
-  - [ ] Sistema de créditos ("1 crédito = 1 receta del chef", pesos medidos para menú/regeneración, `credit_ledger` idempotente)
-  - [ ] Calculadora `scripts/calc-quotas` con precios 2026 y 2027; configuración de planes y cuotas recomendadas
-  - [ ] Protecciones: tope diario por hogar (15 créditos), `AI_MONTHLY_BUDGET_USD` global, rate limit
-  - [ ] Recargas de créditos vía Mercado Pago y script de reporte `scripts/ai-cost-report`
-  - [ ] Pruebas de costos, ledger idempotente, fallos de IA sin cobro, límites diarios y presupuesto
+- [x] **Bloque 5: Costos, Créditos y Recargas**
+  - [x] Instrumentación de `ai_usage_log` con tokens de entrada, salida, razonamiento, costo USD, modo, origen y éxito; tabla `ai_pricing` con fecha de vigencia
+  - [x] Medición real Flash vs Flash-Lite y reasoning bajo vs off en `docs/COSTOS.md`; recomendación por modo y variables de modelo
+  - [x] Reducción de tokens de entrada (núcleo común + sección por modo, estático primero)
+  - [x] Sistema de créditos ("1 crédito = 1 receta del chef", pesos medidos para menú/regeneración, `credit_ledger` idempotente)
+  - [x] Calculadora `scripts/calc-quotas` con precios 2026 y 2027; configuración de planes y cuotas recomendadas
+  - [x] Protecciones: tope diario por hogar (15 créditos), `AI_MONTHLY_BUDGET_USD` global, rate limit
+  - [x] Recargas de créditos vía Mercado Pago y script de reporte `scripts/ai-cost-report`
+  - [x] Pruebas de costos, ledger idempotente, fallos de IA sin cobro, límites diarios y presupuesto
 - [ ] **Bloque 6: Revisión Final (QA)**
   - [ ] Recorrido completo móvil (390x844) y escritorio de flujos nuevos
   - [ ] Verificación y corrección del título del modal del chef ("El Chef de Compars")

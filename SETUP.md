@@ -233,6 +233,12 @@ npx supabase migration apply --file supabase/migrations/20261012_ronda5_cache_pu
 
 # 2. Crear tablas de preferencias de usuario y ajustes compartidos de hogar
 npx supabase migration apply --file supabase/migrations/20261012_ronda5_settings_and_preferences.sql
+
+# 3. Control de acceso cerrado, códigos de acceso e invitaciones 128-bit
+npx supabase migration apply --file supabase/migrations/20261012_ronda5_access_control.sql
+
+# 4. Tarifas oficiales 2026/2027, ledger de créditos y recargas Mercado Pago
+npx supabase migration apply --file supabase/migrations/20261012_ronda5_pricing_and_credits.sql
 ```
 
 #### Opción 2: Desde el Editor SQL de Supabase (Web)
@@ -241,6 +247,7 @@ npx supabase migration apply --file supabase/migrations/20261012_ronda5_settings
    - `supabase/migrations/20261012_ronda5_cache_purge.sql` (vaciado de caché vieja)
    - `supabase/migrations/20261012_ronda5_settings_and_preferences.sql` (persistencia y preferencias)
    - `supabase/migrations/20261012_ronda5_access_control.sql` (control de acceso, códigos, invitaciones 128-bit y límites de plan)
+   - `supabase/migrations/20261012_ronda5_pricing_and_credits.sql` (tarifas 2026/2027, credit_ledger, recargas y límites)
 3. Hacé click en **"Run"**.
 
 ---
@@ -280,7 +287,24 @@ El plan `tester` otorga 9999 consultas/mes, capacidad de hasta 99 integrantes y 
 
 ---
 
-### D. SQL para borrar datos de prueba y comenzar de cero (Editor SQL de Supabase)
+### D. Monitoreo de Costos de IA y Verificación de Cuotas
+
+Para auditar el gasto de la IA y validar la rentabilidad de las cuotas con las tarifas de 2026 y 2027:
+
+```bash
+# 1. Simulación y cálculo de márgenes y cuotas seguras (Base vs Premium):
+npx tsx scripts/calc-quotas.ts
+
+# 2. Reporte de gasto mensual real acumulado en dólares (total, por modo y por hogar):
+npx tsx scripts/ai-cost-report.ts
+```
+
+- **Presupuesto global:** `AI_MONTHLY_BUDGET_USD` (por defecto $50 USD). A partir del 80% ($40 USD) el sistema emite logs de advertencia y al 100% ($50 USD) pausa temporalmente el servicio a cuentas no-tester con error 503 para evitar desbordes financieros.
+- **Tope diario por hogar:** Máximo 15 créditos/día por hogar (se reinicia automáticamente a medianoche UTC).
+
+---
+
+### E. SQL para borrar datos de prueba y comenzar de cero (Editor SQL de Supabase)
 
 Si querés reiniciar tu base de datos remota para empezar 100% limpia sin usuarios de prueba, hogares ni datos residuales de rondas anteriores, ejecutá este script en el **SQL Editor** de Supabase (este script **NO** se ejecuta automáticamente; solo vos decidís cuándo correrlo):
 

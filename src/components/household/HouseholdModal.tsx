@@ -25,17 +25,20 @@ interface HouseholdModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenInstallGuide: () => void;
+  onOpenPayment?: (tab?: 'plans' | 'recharges') => void;
 }
 
 export const HouseholdModal: React.FC<HouseholdModalProps> = ({
   isOpen,
   onClose,
   onOpenInstallGuide,
+  onOpenPayment,
 }) => {
   const {
     household,
     members,
     currentPlan,
+    creditBalance,
     isOwner,
     createHousehold,
     createInviteLink,
@@ -305,6 +308,51 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
                 </div>
               )}
             </div>
+          )}
+        </div>
+
+        {/* Uso de IA y Créditos (Para Dueño e Integrantes) */}
+        <div className="mt-4 p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Uso de IA y Créditos
+              </span>
+            </div>
+            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-xs">
+              {creditBalance} {creditBalance === 1 ? 'crédito' : 'créditos'}
+            </span>
+          </div>
+
+          <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5 leading-tight">
+            <div className="flex justify-between">
+              <span>Plan asignado:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">
+                {currentPlan === 'premium' ? 'Premium (150/mes)' : currentPlan === 'base' ? 'Base (40/mes)' : currentPlan === 'tester' ? 'Tester Ilimitado' : 'Gratuito'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tope de seguridad diario:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">15 créditos / día</span>
+            </div>
+            <div className="pt-1 border-t border-amber-200/40 dark:border-amber-900/30 text-[10px] text-slate-500 dark:text-slate-400">
+              💡 1 crédito = 1 receta del Chef • 8 créditos = Menú semanal (7 días) • Gratis = Interpretar ítems
+            </div>
+          </div>
+
+          {onOpenPayment && isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenPayment('recharges');
+              }}
+              className="w-full mt-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>⚡ Comprar recarga de créditos (Mercado Pago)</span>
+            </button>
           )}
         </div>
 

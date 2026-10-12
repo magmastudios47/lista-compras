@@ -17,6 +17,7 @@ export interface HouseholdContextType {
   members: HouseholdMember[];
   loading: boolean;
   remainingQueries: number;
+  creditBalance: number;
   currentPlan: PlanType;
   hasActiveLicense: boolean;
   isOwner: boolean;
@@ -29,7 +30,8 @@ export interface HouseholdContextType {
   joinByInvite: (rawToken: string) => Promise<{ success: boolean; householdId?: string; householdName?: string; alreadyMember?: boolean; pendingApproval?: boolean; error?: string }>;
   removeMember: (memberUserId: string) => Promise<{ success: boolean; error?: string }>;
   redeemAccessCode: (code: string, householdName?: string, city?: string) => Promise<{ success: boolean; householdId?: string; planId?: PlanType; error?: string }>;
-  incrementChefUsage: () => void;
+  incrementChefUsage: (amount?: number) => void;
+  refreshCredits: () => Promise<void>;
   refreshLicense: () => Promise<void>;
   refreshMembers: () => Promise<void>;
   updateHouseholdSettings: (settings: Partial<Household>) => Promise<Household>;
@@ -51,6 +53,22 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState(true);
   const [currentPlan, setCurrentPlan] = useState<PlanType>('free');
   const [chefUsedThisMonth, setChefUsedThisMonth] = useState(0);
+  const [rawCredits, setRawCredits] = useState<number | null>(null);
+
+  // Consulta el balance de créditos del ledger
+  const fetchCredits = useCallback(async (householdId: string) => {
+    if (!isConfigured || isDemoMode) return;
+    try {
+      const { data, error } = await supabase.rpc('get_household_credit_balance', {
+        p_household_id: householdId,
+      });
+      if (!error && typeof data === 'number') {
+        setRawCredits(data);
+      }
+    } catch (err) {
+      console.warn('Error consultando credit_ledger:', err);
+    }
+  }, [isDemoMode]);
 
   // Consulta la licencia activa exclusivamente desde la base de datos
   const fetchLicense = useCallback(async (householdId: string) => {
@@ -156,6 +174,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           await fetchMembers(current.id);
           await fetchLicense(current.id);
+          await fetchCredits(current.id);
         } else {
           setHousehold(null);
           setMembers([]);
@@ -170,7 +189,32 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     fetchHousehold();
-  }, [user, isDemoMode, fetchLicense, fetchMembers]);
+  }, [user, isDemoMode, fetchLicense, fetchMembers, fetchCredits]);
+
+  // Suscripción Realtime a cambios en credit_ledger
+  useEffect(() => {
+    if (!household?.id || isDemoMode || !isConfigured) return;
+
+    const creditChannel = supabase
+      .channel(`credit_ledger_${household.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'credit_ledger',
+          filter: `household_id=eq.${household.id}`,
+        },
+        async () => {
+          await fetchCredits(household.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(creditChannel);
+    };
+  }, [household?.id, isDemoMode, fetchCredits]);
 
   // Suscripción Realtime a cambios en la tabla licenses para actualizar el plan instantáneamente al confirmarse el webhook
   useEffect(() => {
@@ -188,6 +232,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         },
         async () => {
           await fetchLicense(household.id);
+          await fetchCredits(household.id);
         }
       )
       .subscribe();
@@ -195,7 +240,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       supabase.removeChannel(licenseChannel);
     };
-  }, [household?.id, isDemoMode, fetchLicense]);
+  }, [household?.id, isDemoMode, fetchLicense, fetchCredits]);
 
   // Suscripción Realtime a cambios en el hogar
   useEffect(() => {
@@ -557,22 +602,30 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return `https://wa.me/?text=${encodeURIComponent(message)}`;
   };
 
-  const incrementChefUsage = useCallback(() => {
+  const incrementChefUsage = useCallback((amount: number = 1) => {
     setChefUsedThisMonth((prev) => {
-      const next = prev + 1;
+      const next = prev + amount;
       if (household) {
         const updated = { ...household, chef_queries_used_month: next };
         localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(updated));
       }
       return next;
     });
+    setRawCredits((prev) => (prev !== null ? Math.max(0, prev - amount) : null));
   }, [household]);
+
+  const refreshCredits = useCallback(async () => {
+    if (household) {
+      await fetchCredits(household.id);
+    }
+  }, [household, fetchCredits]);
 
   const refreshLicense = useCallback(async () => {
     if (household) {
       await fetchLicense(household.id);
+      await fetchCredits(household.id);
     }
-  }, [household, fetchLicense]);
+  }, [household, fetchLicense, fetchCredits]);
 
   const refreshMembers = useCallback(async () => {
     if (household) {
@@ -588,7 +641,9 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const effectiveLimit = planLimits[currentPlan] ?? 0;
-  const remainingQueries = Math.max(0, effectiveLimit - chefUsedThisMonth);
+  const fallbackRemaining = Math.max(0, effectiveLimit - chefUsedThisMonth);
+  const creditBalance = rawCredits !== null ? rawCredits : fallbackRemaining;
+  const remainingQueries = creditBalance;
   const isPremium = currentPlan === 'premium' || currentPlan === 'tester';
   const hasActiveLicense = ACCESS_MODE === 'open' || ['base', 'premium', 'tester'].includes(currentPlan);
   const isOwner = Boolean(
@@ -645,6 +700,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         members,
         loading,
         remainingQueries,
+        creditBalance,
         currentPlan,
         hasActiveLicense,
         isOwner,
@@ -658,6 +714,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         removeMember,
         redeemAccessCode,
         incrementChefUsage,
+        refreshCredits,
         refreshLicense,
         refreshMembers,
         updateHouseholdSettings,

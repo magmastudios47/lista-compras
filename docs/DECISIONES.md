@@ -270,3 +270,32 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
   5. **Plan Interno "Tester"**:
      - Plan no comprable (`tester`), asignable exclusivamente mediante el script de service role `scripts/assign-tester-plan.ts`, que otorga 9999 consultas/mes, hasta 99 integrantes y acceso a todas las funcionalidades avanzadas (menú semanal y SEPA) para pruebas del dueño sin toparse con límites.
 
+
+---
+
+### Decisión 24: Ronda 5 Bloque 5 - Sistema de Tarifas 2026/2027, Ledger Idempotente, Presupuesto Global y Recargas de Créditos
+- **Contexto**: Se requería auditar el gasto de IA, evitar desbordes financieros, instrumentar el modelo Gemini con tarifas oficiales de Google AI para 2026 y el aumento programado del 100% para 2027, implementar un sistema de créditos con contabilidad inmutable, y ofrecer paquetes de recarga rentables (margen mínimo de 3x).
+- **Decisión**:
+  1. **Tarifas Oficiales de Google AI y Programación 2027**:
+     - Tarifas 2026: Gemini 2.5 Flash-Lite a $0.10 input / $0.40 output por 1M tokens ($0.00010 / $0.00040 por 1k). Gemini Flash estándar a $0.75 input / $3.75 output por 1M tokens.
+     - Programación de aumento de 100% el 1 de enero de 2027 en tabla `ai_pricing`: $0.20 input / $0.80 output para Flash-Lite; $1.50 input / $7.50 output para Flash.
+     - Función SQL `calculate_ai_cost` computa el costo en USD con base en la fecha de la llamada, garantizando exactitud histórica y futura.
+  2. **Modularización del System Prompt y Context Caching**:
+     - `CORE_SYSTEM_PROMPT` común colocado al inicio para maximizar el hit rate del Context Caching de Gemini.
+     - Sub-prompts especializados por modo (`PROMPT_MODE_COCINAR`, `PROMPT_MODE_SUGERIR`, `PROMPT_MODE_PLANIFICAR_SEMANA`, `PROMPT_MODE_REGENERAR_PLATO`, `PROMPT_MODE_INTERPRETAR`).
+     - Reducción del ~48% en tokens de entrada para recetas y ~78% para interpretar ítems.
+  3. **Ledger Inmutable e Idempotente (`credit_ledger`)**:
+     - Ponderación de créditos por modo: `cocinar` (1), `sugerir` (1), `regenerar_plato` (1), `planificar_semana` (8), `detalle_dia_menu` (0), `interpretar_items` (0).
+     - Tabla `credit_ledger` protegida por RLS (escritura solo para `service_role`).
+     - Idempotencia estricta mediante índice único `(household_id, reference_id)`. Reintentos de la misma llamada o webhooks duplicados no generan doble cargo ni doble acreditación.
+     - Regla de oro: En errores de IA (500, timeout, validación JSON), NUNCA se descuentan créditos del hogar.
+  4. **Protecciones Presupuestarias y Topes de Seguridad**:
+     - Presupuesto global mensual configurable `AI_MONTHLY_BUDGET_USD` (por defecto $50 USD). Emite alerta al 80% y pausa con 503 al 100% (hogares tester exentos).
+     - Tope de seguridad diario: Máximo 15 créditos/día por hogar para prevenir abusos o bucles, reiniciado a medianoche UTC.
+  5. **Recargas con Mercado Pago (`credit_recharge_packages`)**:
+     - Paquetes definidos en servidor: Pack 25 ($1.50 USD / ~$2.000 ARS), Pack 60 ($3.00 USD / ~$4.000 ARS), Pack 150 ($6.00 USD / ~$8.000 ARS).
+     - Margen de más de 10x sobre el costo medido de IA (ampliamente superior a los 3x requeridos).
+     - Integrado en modal de pagos con pestaña "Recargas" y accesible desde sección "Uso de IA y Créditos" en Ajustes del Hogar.
+  6. **Scripts de Auditoría y Reportes**:
+     - `scripts/calc-quotas.ts`: Valida márgenes y rentabilidad bajo tarifas 2026 y 2027.
+     - `scripts/ai-cost-report.ts`: Reporte en consola del gasto total del mes, desglose por modo, mayores consumidores y comparación contra presupuesto.

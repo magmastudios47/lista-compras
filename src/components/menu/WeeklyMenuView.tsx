@@ -714,7 +714,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
             ) : (
               <>
                 <Sparkles className="w-5 h-5 fill-white" />
-                <span>Generar Menú Semanal (consume 3 consultas)</span>
+                <span>Generar Menú Semanal (este menú usa 8 créditos • te quedan {remainingQueries} créditos)</span>
               </>
             )}
           </button>

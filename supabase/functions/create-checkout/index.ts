@@ -77,35 +77,61 @@ serve(async (req: Request) => {
       });
     }
 
-    const targetPlan = plans.find((p) => p.id === (plan_id === 'upgrade' ? 'premium' : plan_id));
-    if (!targetPlan || targetPlan.id === 'free') {
-      return new Response(JSON.stringify({ error: 'El plan seleccionado no es válido para pago.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    let amountUsd = 0;
+    let effectivePlanId = plan_id;
+    let planTitle = '';
 
-    // Consultar licencia actual para calcular posibles upgrades
-    const { data: currentLicense } = await supabaseAdmin
-      .from('licenses')
-      .select('plan_id, status')
-      .eq('household_id', household_id)
-      .maybeSingle();
+    if (plan_id.startsWith('pack_')) {
+      const { data: pack, error: packErr } = await supabaseAdmin
+        .from('credit_recharge_packages')
+        .select('*')
+        .eq('id', plan_id)
+        .eq('is_active', true)
+        .maybeSingle();
 
-    let amountUsd = Number(targetPlan.price_usd);
-    let effectivePlanId = targetPlan.id;
-
-    if (plan_id === 'upgrade') {
-      if (currentLicense?.plan_id === 'base') {
-        const basePlan = plans.find((p) => p.id === 'base');
-        const basePrice = basePlan ? Number(basePlan.price_usd) : 10.0;
-        amountUsd = Math.max(0, amountUsd - basePrice); // Diferencia: 20 - 10 = 10 USD
-        effectivePlanId = 'premium';
-      } else {
-        return new Response(JSON.stringify({ error: 'Solo se puede hacer upgrade si el hogar tiene Plan Base.' }), {
+      if (packErr || !pack) {
+        return new Response(JSON.stringify({ error: 'El paquete de recarga seleccionado no es válido.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      amountUsd = Number(pack.price_usd);
+      effectivePlanId = pack.id;
+      planTitle = `Lista Compars - ${pack.name}`;
+    } else {
+      const targetPlan = plans.find((p) => p.id === (plan_id === 'upgrade' ? 'premium' : plan_id));
+      if (!targetPlan || targetPlan.id === 'free') {
+        return new Response(JSON.stringify({ error: 'El plan seleccionado no es válido para pago.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Consultar licencia actual para calcular posibles upgrades
+      const { data: currentLicense } = await supabaseAdmin
+        .from('licenses')
+        .select('plan_id, status')
+        .eq('household_id', household_id)
+        .maybeSingle();
+
+      amountUsd = Number(targetPlan.price_usd);
+      effectivePlanId = targetPlan.id;
+      planTitle = `Lista Compars - ${targetPlan.name}`;
+
+      if (plan_id === 'upgrade') {
+        if (currentLicense?.plan_id === 'base') {
+          const basePlan = plans.find((p) => p.id === 'base');
+          const basePrice = basePlan ? Number(basePlan.price_usd) : 10.0;
+          amountUsd = Math.max(0, amountUsd - basePrice); // Diferencia: 20 - 10 = 10 USD
+          effectivePlanId = 'premium';
+          planTitle = 'Lista Compars - Upgrade a Plan Premium';
+        } else {
+          return new Response(JSON.stringify({ error: 'Solo se puede hacer upgrade si el hogar tiene Plan Base.' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 

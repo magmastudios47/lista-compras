@@ -188,7 +188,7 @@ export const ChefModal: React.FC<ChefModalProps> = ({
                 )}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {isAiDemoMode ? 'Modo de prueba local (sin consumo de créditos)' : `${remainingQueries} consultas restantes este mes`}
+                {isAiDemoMode ? 'Modo de prueba local (sin consumo de créditos)' : `Te quedan ${remainingQueries} créditos este mes (1 crédito = 1 receta)`}
               </p>
             </div>
           </div>

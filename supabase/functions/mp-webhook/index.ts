@@ -242,25 +242,51 @@ serve(async (req: Request) => {
       })
       .eq('id', paymentRecord.id);
 
-    // Actualizar o insertar licencia activa para el hogar
-    await supabaseAdmin
-      .from('licenses')
-      .upsert({
-        household_id: paymentRecord.household_id,
-        plan_id: paymentRecord.plan_id,
-        status: 'active',
-        valid_until: null, // De por vida
-        activated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'household_id' });
+    // Si es un paquete de recarga de créditos (pack_*)
+    if (paymentRecord.plan_id && paymentRecord.plan_id.startsWith('pack_')) {
+      const { data: pack } = await supabaseAdmin
+        .from('credit_recharge_packages')
+        .select('credits')
+        .eq('id', paymentRecord.plan_id)
+        .maybeSingle();
 
-    // Actualizar la cuota del hogar en la tabla households
-    await supabaseAdmin
-      .from('households')
-      .update({
-        monthly_chef_limit: monthlyQueries,
-      })
-      .eq('id', paymentRecord.household_id);
+      const creditsToGrant = pack ? pack.credits : 25;
+      await supabaseAdmin.rpc('grant_household_credits', {
+        p_household_id: paymentRecord.household_id,
+        p_amount: creditsToGrant,
+        p_reason: 'recharge_pack',
+        p_reference_id: `mp_payment_${paymentRecord.id}`,
+      });
+    } else {
+      // Actualizar o insertar licencia activa para el hogar
+      await supabaseAdmin
+        .from('licenses')
+        .upsert({
+          household_id: paymentRecord.household_id,
+          plan_id: paymentRecord.plan_id,
+          status: 'active',
+          valid_until: null, // De por vida
+          activated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'household_id' });
+
+      // Actualizar la cuota del hogar en la tabla households
+      await supabaseAdmin
+        .from('households')
+        .update({
+          monthly_chef_limit: monthlyQueries,
+        })
+        .eq('id', paymentRecord.household_id);
+
+      // Otorga créditos iniciales del plan en el ledger
+      const planCredits = paymentRecord.plan_id === 'premium' ? 150 : 40;
+      await supabaseAdmin.rpc('grant_household_credits', {
+        p_household_id: paymentRecord.household_id,
+        p_amount: planCredits,
+        p_reason: 'plan_grant',
+        p_reference_id: `plan_activation_${paymentRecord.id}`,
+      });
+    }
 
     return new Response(
       JSON.stringify({

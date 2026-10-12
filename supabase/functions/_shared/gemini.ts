@@ -1,10 +1,10 @@
 // Cliente y abstracción de Google Gemini API
-import { CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt';
+import { getSystemPromptForMode, CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt';
 
 export interface GeminiCallOptions {
   systemPrompt?: string;
   userData: {
-    modo: 'cocinar' | 'sugerir' | 'interpretar_items' | 'interpretar_despensa' | 'menu' | 'planificar_semana';
+    modo: 'cocinar' | 'sugerir' | 'interpretar_items' | 'interpretar_despensa' | 'menu' | 'planificar_semana' | 'detalle_dia_menu' | 'regenerar_plato';
     pedido?: string;
     personas?: number;
     restricciones?: string[];
@@ -18,6 +18,9 @@ export interface GeminiCallOptions {
     ingredientes_obligatorios?: string[];
     platos_recientes_evitar?: string[];
     semilla?: number | string;
+    dia?: string;
+    tipo?: string;
+    comidas?: any[];
   };
   thinkingBudget?: number;
 }
@@ -26,6 +29,7 @@ export interface GeminiResponse<T> {
   data: T;
   promptTokens: number;
   completionTokens: number;
+  reasoningTokens: number;
   totalTokens: number;
   modelUsed: string;
 }
@@ -77,7 +81,7 @@ export class GeminiClient {
       throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno.');
     }
 
-    const systemInstruction = options.systemPrompt || CHEF_SYSTEM_PROMPT;
+    const systemInstruction = options.systemPrompt || getSystemPromptForMode(options.userData.modo);
 
     // Seleccionar modelo adecuado: FAST para interpretar_items, CHEF para cocinar/sugerir/planificar
     const isFastMode =
@@ -220,10 +224,14 @@ export class GeminiClient {
     }
 
     const usage = jsonResponse.usageMetadata || {};
+    const candDetails = usage.candidatesTokensDetails || [];
+    const reasoningCount = (candDetails[0]?.reasoningTokenCount) || usage.thinkingTokenCount || 0;
+
     return {
       data: validatedData,
       promptTokens: usage.promptTokenCount || 0,
       completionTokens: usage.candidatesTokenCount || 0,
+      reasoningTokens: reasoningCount,
       totalTokens: usage.totalTokenCount || 0,
       modelUsed: activeModel,
     };

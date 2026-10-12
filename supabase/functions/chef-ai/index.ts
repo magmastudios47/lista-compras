@@ -134,8 +134,36 @@ serve(async (req: Request) => {
     let householdData: any = null;
     const isInterpretationMode = modo === 'interpretar_items' || modo === 'interpretar_despensa';
     const isMenuMode = modo === 'menu' || modo === 'planificar_semana' || modo === 'detalle_dia_menu' || modo === 'regenerar_plato';
-    // El detalle por día no descuenta consultas extra porque ya se cobró el menú; regenerar plato consume 1
-    const queryCost = modo === 'detalle_dia_menu' ? 0 : (modo === 'regenerar_plato' ? 1 : (isMenuMode ? 3 : 1));
+    
+    // Pesos medidos en créditos: 1 crédito = 1 receta, 8 créditos = menú semanal completo, 0 = interpretar y detalle
+    const creditCost = modo === 'detalle_dia_menu' ? 0 : (isInterpretationMode ? 0 : (modo === 'regenerar_plato' ? 1 : (isMenuMode ? 8 : 1)));
+
+    // Protección de Presupuesto Global Mensual de IA (AI_MONTHLY_BUDGET_USD)
+    const AI_MONTHLY_BUDGET_USD = parseFloat(Deno.env.get('AI_MONTHLY_BUDGET_USD') || '50.0');
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { data: usageRows } = await supabaseClient
+      .from('ai_usage_log')
+      .select('cost_usd')
+      .gte('created_at', startOfMonth.toISOString());
+
+    const totalSpentUsd = (usageRows || []).reduce((acc: number, row: any) => acc + Number(row.cost_usd || 0), 0);
+
+    if (totalSpentUsd >= AI_MONTHLY_BUDGET_USD && activeLicense?.plan_id !== 'tester') {
+      return new Response(
+        JSON.stringify({
+          error: 'El servicio del Chef IA ha alcanzado su límite mensual de seguridad. El servicio se reanudará el próximo mes.',
+          budget_exceeded: true,
+        }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (totalSpentUsd >= AI_MONTHLY_BUDGET_USD * 0.8) {
+      console.warn(`[PRESUPUESTO IA] Alerta: Se ha alcanzado el 80% del presupuesto mensual (${totalSpentUsd.toFixed(2)} / ${AI_MONTHLY_BUDGET_USD} USD).`);
+    }
 
     if (household_id) {
       // Si es modo menu / planificar_semana, verificar plan Premium o Tester
@@ -153,10 +181,6 @@ serve(async (req: Request) => {
 
       if (isInterpretationMode) {
         // Cuota propia para interpretación de items (200 consultas por mes por hogar)
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-
         const { count, error: countErr } = await supabaseClient
           .from('ai_usage_log')
           .select('id', { count: 'exact', head: true })
@@ -173,25 +197,40 @@ serve(async (req: Request) => {
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-      } else {
-        // Cuota general del Chef mensual (1 consulta normal, 3 para menú)
-        const { data: hh } = await supabaseClient
-          .from('households')
-          .select('monthly_chef_limit, chef_queries_used_month')
-          .eq('id', household_id)
-          .maybeSingle();
+      } else if (creditCost > 0) {
+        // Verificar Tope Diario por Hogar (por defecto 15 créditos / día)
+        const { data: canSpendDaily } = await supabaseClient.rpc('check_daily_credit_limit', {
+          p_household_id: household_id,
+          p_amount: creditCost,
+          p_daily_limit: 15,
+        });
 
-        if (hh) {
-          householdData = hh;
-          if (hh.chef_queries_used_month + queryCost > hh.monthly_chef_limit) {
-            return new Response(
-              JSON.stringify({
-                error: `Has alcanzado el límite mensual de consultas del Chef IA (${queryCost} necesarias).`,
-                quota_exceeded: true,
-              }),
-              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
+        if (canSpendDaily === false && activeLicense?.plan_id !== 'tester') {
+          return new Response(
+            JSON.stringify({
+              error: 'Has alcanzado el tope diario de consumo de IA para tu hogar (15 créditos por día). Probá de nuevo mañana.',
+              daily_limit_exceeded: true,
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verificar Saldo Disponible en credit_ledger
+        const { data: balanceData } = await supabaseClient.rpc('get_household_credit_balance', {
+          p_household_id: household_id,
+        });
+
+        const availableCredits = Number(balanceData || 0);
+        if (availableCredits < creditCost && activeLicense?.plan_id !== 'tester') {
+          return new Response(
+            JSON.stringify({
+              error: `Créditos insuficientes. Esta acción requiere ${creditCost} crédito(s) y tu saldo actual es de ${availableCredits} crédito(s).`,
+              credits_insufficient: true,
+              required: creditCost,
+              balance: availableCredits,
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
       }
     }
@@ -384,26 +423,41 @@ serve(async (req: Request) => {
     });
 
     // 6. Registrar en ai_usage_log e incrementar cuota mensual si no es modo interpretación
+    // 6. Registrar en ai_usage_log y debitar créditos del ledger de forma idempotente
     if (household_id) {
+      // Calcular costo en USD según modelo y tarifas vigentes a la fecha
+      const { data: costCalc } = await supabaseClient.rpc('calculate_ai_cost', {
+        p_model: geminiResult.modelUsed || 'gemini-3.5-flash',
+        p_prompt_tokens: geminiResult.promptTokens,
+        p_completion_tokens: geminiResult.completionTokens,
+        p_date: new Date().toISOString(),
+      });
+      const costUsd = Number(costCalc || 0);
+
       await supabaseClient.from('ai_usage_log').insert({
         household_id,
         user_id: userId === 'anonymous' ? null : userId,
         mode: modo,
+        model: geminiResult.modelUsed,
         prompt_tokens: geminiResult.promptTokens,
         completion_tokens: geminiResult.completionTokens,
+        reasoning_tokens: geminiResult.reasoningTokens || 0,
+        cost_usd: costUsd,
         total_tokens: geminiResult.totalTokens,
         is_cached: false,
         origin: 'ia',
         status: 'success',
       });
 
-      if (!isInterpretationMode && householdData && queryCost > 0) {
-        await supabaseClient
-          .from('households')
-          .update({
-            chef_queries_used_month: householdData.chef_queries_used_month + queryCost,
-          })
-          .eq('id', household_id);
+      // Débito en libro mayor (credit_ledger)
+      if (creditCost > 0) {
+        const queryReferenceId = `query_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await supabaseClient.rpc('deduct_household_credits', {
+          p_household_id: household_id,
+          p_amount: creditCost,
+          p_reason: `chef_${modo}`,
+          p_reference_id: queryReferenceId,
+        });
       }
     }
 

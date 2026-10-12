@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isMpModalOpen, setIsMpModalOpen] = useState(false);
+  const [mpModalTab, setMpModalTab] = useState<'plans' | 'recharges'>('plans');
 
   const { isOnline } = useOfflineSync();
   const { user, loading: authLoading } = useAuth();
@@ -352,6 +353,10 @@ export const App: React.FC = () => {
         isOpen={isHouseholdModalOpen}
         onClose={() => setIsHouseholdModalOpen(false)}
         onOpenInstallGuide={() => setIsInstallModalOpen(true)}
+        onOpenPayment={(tab = 'plans') => {
+          setMpModalTab(tab);
+          setIsMpModalOpen(true);
+        }}
       />
 
       <InstallPromptModal
@@ -368,6 +373,7 @@ export const App: React.FC = () => {
       <MercadoPagoModal
         isOpen={isMpModalOpen}
         onClose={() => setIsMpModalOpen(false)}
+        initialTab={mpModalTab}
       />
     </div>
   );
