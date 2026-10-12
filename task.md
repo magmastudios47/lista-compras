@@ -178,10 +178,10 @@
   - [x] Protecciones: tope diario por hogar (15 créditos), `AI_MONTHLY_BUDGET_USD` global, rate limit
   - [x] Recargas de créditos vía Mercado Pago y script de reporte `scripts/ai-cost-report`
   - [x] Pruebas de costos, ledger idempotente, fallos de IA sin cobro, límites diarios y presupuesto
-- [ ] **Bloque 6: Revisión Final (QA)**
-  - [ ] Recorrido completo móvil (390x844) y escritorio de flujos nuevos
-  - [ ] Verificación y corrección del título del modal del chef ("El Chef de Compars")
-  - [ ] Ciclo de autocorrección, linter, tipos, build y suite completa de tests
-  - [ ] Documentación: `docs/QA-REPORT-R5.md`, `docs/RONDA5.md`, actualización de `SKILL.md` y `SETUP.md`
+- [x] **Bloque 6: Revisión Final (QA)**
+  - [x] Recorrido completo móvil (390x844) y escritorio de flujos nuevos
+  - [x] Verificación y corrección del título del modal del chef ("El Chef")
+  - [x] Ciclo de autocorrección, linter, tipos, build y suite completa de tests (147/147 tests pasando)
+  - [x] Documentación: `docs/QA-REPORT-R5.md`, `docs/RONDA5.md`, actualización de `SKILL.md` y `SETUP.md`
 
 

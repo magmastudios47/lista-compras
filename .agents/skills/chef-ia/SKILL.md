@@ -262,11 +262,22 @@ export const DetalleDiaMenuResponseSchema = z.object({
 
 ---
 
-## 4. Cuotas y Límites de Consultas
+## 4. Sistema de Créditos, Ponderación y Límites (Ronda 5)
 
-| Modo | Cuota Mensual | Comportamiento de Límite |
+En la Ronda 5 se implementó el sistema de contabilidad inmutable en base de datos (`credit_ledger`), donde **1 crédito = 1 receta del Chef**:
+
+| Modo | Créditos debitados | Comportamiento |
 | :--- | :--- | :--- |
-| `cocinar` | Compartida (Free 5, Base 40, Premium 150) | Cuenta 1 consulta por invocación |
-| `sugerir` | Compartida (Free 5, Base 40, Premium 150) | Cuenta 1 consulta por invocación |
-| `planificar_semana` + `detalle_dia_menu` | Exclusivo Premium (150) | Flujo en 2 pasos: 1 llamada global + hasta 7 llamadas diarias (8 llamadas totales a IA), computa como **3 consultas** de usuario |
-| `interpretar_items` | Cuota independiente (200 consultas/mes) | No resta cuota del Chef de cocina; cuenta con caché global |
+| `cocinar` | **1 crédito** | Genera receta con fidelidad al plato e ingredientes detallados |
+| `sugerir` | **1 crédito** | Sugiere 3 recetas basadas en lo que hay en la despensa |
+| `regenerar_plato` | **1 crédito** | Regenera una comida puntual del menú semanal |
+| `planificar_semana` | **8 créditos** | 1 crédito por el plan semanal de 7 días + 7 créditos de ingredientes diarios |
+| `detalle_dia_menu` | **0 créditos** | Consulta de ingredientes ya pagados en la planificación |
+| `interpretar_items` | **0 créditos** | Parseo y corrección ortográfica de ítems (sin costo de créditos) |
+
+### Protecciones de Seguridad
+1. **Tope diario por hogar**: Máximo 15 créditos por día calendario UTC. Se reinicia automáticamente a medianoche.
+2. **Presupuesto global mensual**: `AI_MONTHLY_BUDGET_USD` ($50 USD por defecto). Advertencia en logs al 80% ($40 USD) y pausa temporal con código 503 al 100% (hogares en plan `tester` están exentos).
+3. **Idempotencia estricta**: Débito por `reference_id` único; reintentos de red no cobran doble. En errores de IA (500, timeout, validación Zod), **nunca** se cobran créditos.
+4. **Prompt Modular (`v1.5.0`)**: Divide el sistema en `CORE_SYSTEM_PROMPT` estático al inicio (para maximizar el Context Caching de Gemini) seguido de sub-prompts específicos por modo (`PROMPT_MODE_COCINAR`, `PROMPT_MODE_SUGERIR`, `PROMPT_MODE_PLANIFICAR_SEMANA`, etc.), reduciendo los tokens de entrada entre un 48% y 78%.
+
