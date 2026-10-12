@@ -133,3 +133,55 @@
   - [x] Documentos `docs/QA-REPORT-R4.md` y `docs/RONDA4.md`
   - [x] Actualización final de `SKILL.md`, `SETUP.md` y `task.md`
 
+---
+
+# Ronda 5
+
+- [ ] **Bloque 0: Diagnóstico (Causa Raíz de Bugs A y B, Sin Corregir Todavía)**
+  - [ ] Rastreo de cadenas fijas ("tomate perita", "arroz", "balanceado con proteínas", etc.) y caminos de fallback/mock/stub en cliente y servidor
+  - [ ] Análisis de clave de ai_cache (pedido normalizado, personas, restricciones, prompt version) y contenido de caché
+  - [ ] Verificación de flujo de GEMINI_API_KEY y modelos en Edge Function ante 429, timeout, JSON inválido, claves ausentes
+  - [ ] Reproducción de bugs A y B con API real vs pantalla
+  - [ ] Documentación de causa raíz con evidencia en `docs/DIAGNOSTICO-R5.md`
+  - [ ] Regla global: Nunca contenido falso en silencio, bandera AI_DEMO_MODE=true visible, campo origen ("ia"|"cache"), test anti-fallbacks silenciosos
+- [ ] **Bloque 1: Chef Confiable**
+  - [ ] Corrección de causa raíz de Bug A
+  - [ ] Clave de caché completa con pedido, personas, restricciones y PROMPT_VERSION; migración para vaciar ai_cache
+  - [ ] Validador de cobertura del pedido (productos nombrados deben estar en ingredientes salvo "sin X", reintento único, sin cobro si falla)
+  - [ ] Suite de pruebas de regresión culinaria con IA real (>=12 pedidos variados, test anti-duplicados y anti-arroz genérico)
+  - [ ] Pruebas end-to-end en navegador (cocinar y sugerir) y reporte en `docs/chef-quality-report.md`
+- [ ] **Bloque 2: Menú Semanal Sin Repeticiones**
+  - [ ] Corrección de causa raíz de Bug B (validadores de variedad sobre resultado final, interfaz sin relleno ni reciclado)
+  - [ ] Semilla aleatoria por pedido, histórico de últimos 2 menús a evitar
+  - [ ] `por_que_encaja` único por plato y objetivo (error si hay textos idénticos)
+  - [ ] Funciones "Regenerar este plato" y "Regenerar la semana" con débito de créditos
+  - [ ] Pruebas con IA real (Deportista 7 días sin repetición, perfiles distintos, histórico de hogar, aviso único, medición de tokens/llamadas)
+- [ ] **Bloque 3: Configuración que se Guarda y Arranque desde Cero**
+  - [ ] Persistencia automática con debounce (~500ms), indicador "Guardado" y soporte offline (`user_preferences` y `household_settings` con RLS)
+  - [ ] Arranque desde cero: eliminación de datos predeterminados (Facundo, Junín, sesión predeterminada), nuevo flujo de ingreso/creación de hogar
+  - [ ] Pruebas de persistencia, sincronización multidispositivo y usuario nuevo sin datos
+  - [ ] Snippet SQL en `SETUP.md` para limpieza de datos de prueba
+- [ ] **Bloque 4: Acceso Solo para Quienes Compran**
+  - [ ] Variable `ACCESS_MODE` ("closed" por defecto, "open" para tests), verificación en servidor y pantalla de acceso/paywall
+  - [ ] Pantalla pública para no autenticados con precios leídos del servidor
+  - [ ] Códigos de acceso (`access_codes`) con hash, usos máximos, expiración y script `scripts/create-access-code`
+  - [ ] Compra de licencia de hogar con flujo seguro de Mercado Pago (servidor + webhook)
+  - [ ] Links de invitación con token de 128 bits hasheado, 7 días de validez, tope de integrantes por plan verificado atómicamente y revocación
+  - [ ] Plan interno "tester" con créditos altos (solo service role); sin licencia = 0 créditos
+  - [ ] Pruebas de acceso no autorizado, links vencidos/revocados, condición de carrera en tope y RLS
+- [ ] **Bloque 5: Costos, Créditos y Recargas**
+  - [ ] Instrumentación de `ai_usage_log` con tokens de entrada, salida, razonamiento, costo USD, modo, origen y éxito; tabla `ai_pricing` con fecha de vigencia
+  - [ ] Medición real Flash vs Flash-Lite y reasoning bajo vs off en `docs/COSTOS.md`; recomendación por modo y variables de modelo
+  - [ ] Reducción de tokens de entrada (núcleo común + sección por modo, estático primero)
+  - [ ] Sistema de créditos ("1 crédito = 1 receta del chef", pesos medidos para menú/regeneración, `credit_ledger` idempotente)
+  - [ ] Calculadora `scripts/calc-quotas` con precios 2026 y 2027; configuración de planes y cuotas recomendadas
+  - [ ] Protecciones: tope diario por hogar (15 créditos), `AI_MONTHLY_BUDGET_USD` global, rate limit
+  - [ ] Recargas de créditos vía Mercado Pago y script de reporte `scripts/ai-cost-report`
+  - [ ] Pruebas de costos, ledger idempotente, fallos de IA sin cobro, límites diarios y presupuesto
+- [ ] **Bloque 6: Revisión Final (QA)**
+  - [ ] Recorrido completo móvil (390x844) y escritorio de flujos nuevos
+  - [ ] Verificación y corrección del título del modal del chef ("El Chef de Compars")
+  - [ ] Ciclo de autocorrección, linter, tipos, build y suite completa de tests
+  - [ ] Documentación: `docs/QA-REPORT-R5.md`, `docs/RONDA5.md`, actualización de `SKILL.md` y `SETUP.md`
+
+

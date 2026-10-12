@@ -27,3 +27,18 @@ Este documento registra el estado de inicio de cada bloque, problemas identifica
   4. **Bloque 4 (Precios automáticos SEPA / Precios Claros)**: Estudio y verificación de datos abiertos oficiales SEPA. Cobertura Junín de los Andes / Neuquén. Script importador batch local / tarea periódica con cálculo de mediana descartando valores atípicos. Tabla `price_reference` con RLS. Precedencia: hogar > SEPA > sin precio. Total aprox. y atribución oficial obligatoria visible.
   5. **Bloque 5 (Revisión Final QA)**: Recorrido integral mobile (390x844) y desktop. Verificación de consola y red. Reportes `docs/QA-REPORT-R4.md` y `docs/RONDA4.md`. Actualización de skill, SETUP.md y task.md.
 
+---
+
+## Estado Inicial (Ronda 5)
+- **Fecha**: 12/10/2026
+- **Línea de base de pruebas**: 113 / 113 tests aprobados en Vitest (`10 test files passed`).
+- **Línea de base de build**: Vite v6.4.4 compila sin errores en producción (`tsc -b && vite build` -> 0 errores).
+- **Problemas y bugs iniciales identificados por el usuario**:
+  1. **Bug A (Chef devuelve ingredientes genéricos)**: Pedidos como "tortilla de papas con acelga para 2" devuelven título correcto pero ingredientes genéricos (arroz 160g, cebolla, tomate perita, aceite de girasol). Ocurre con muchos pedidos y descontó consulta del mes.
+  2. **Bug B (Menú semanal cíclico)**: En menú semanal de 7 días almuerzo y cena, los platos siguen un ciclo de 3 (lunes=jueves=domingo, martes=viernes, miércoles=sábado) y todos repiten el mismo texto en `por_que_encaja` ("Almuerzo balanceado con proteínas y energía equilibrada", "Cena digestiva, reconfortante y rendidora para la familia").
+  3. **Generación silenciosa de contenido falso**: Cualquier fallo de IA o mock que devuelva contenido no generado por el modelo debe erradicarse. Fallos deben mostrar error claro, sin cobrar créditos ni agregar cosas falsas a la lista.
+  4. **Persistencia y arranque desde cero**: La app arranca con datos precargados ("Facundo", "Hogar de Facundo (Junín de los Andes)") y la configuración se reinicia al recargar. Debe arrancar vacía y persistir en `user_preferences` y `household_settings`.
+  5. **Acceso y licencias de hogar**: `ACCESS_MODE=closed` por defecto, pantalla pública, códigos de acceso, invitaciones con cupo y caducidad, licencias ligadas al hogar con Mercado Pago.
+  6. **Costos y créditos**: Pasar de consultas fijas a sistema de créditos medido en tokens y dólares reales con precios de Google AI 2026 y 2027, reduciendo tokens de entrada, protegiendo con topes y permitiendo recargas.
+
+
