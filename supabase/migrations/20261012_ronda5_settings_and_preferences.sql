@@ -35,6 +35,16 @@ CREATE POLICY "Usuarios pueden actualizar sus propias preferencias"
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
 
+-- Función auxiliar para verificar pertenencia al hogar en políticas RLS
+CREATE OR REPLACE FUNCTION public.user_belongs_to_household(h_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM public.household_members
+        WHERE household_id = h_id AND user_id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- 2. TABLA: household_settings (Ajustes compartidos por hogar)
 CREATE TABLE IF NOT EXISTS public.household_settings (
