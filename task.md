@@ -156,11 +156,11 @@
   - [x] `por_que_encaja` único por plato y objetivo (error si hay textos idénticos)
   - [x] Funciones "Regenerar este plato" y "Regenerar la semana" con débito de créditos
   - [x] Pruebas con IA real (Deportista 7 días sin repetición, perfiles distintos, histórico de hogar, aviso único, medición de tokens/llamadas)
-- [ ] **Bloque 3: Configuración que se Guarda y Arranque desde Cero**
-  - [ ] Persistencia automática con debounce (~500ms), indicador "Guardado" y soporte offline (`user_preferences` y `household_settings` con RLS)
-  - [ ] Arranque desde cero: eliminación de datos predeterminados (Facundo, Junín, sesión predeterminada), nuevo flujo de ingreso/creación de hogar
-  - [ ] Pruebas de persistencia, sincronización multidispositivo y usuario nuevo sin datos
-  - [ ] Snippet SQL en `SETUP.md` para limpieza de datos de prueba
+- [x] **Bloque 3: Configuración que se Guarda y Arranque desde Cero**
+  - [x] Persistencia automática con debounce (~500ms), indicador "Guardado" y soporte offline (`user_preferences` y `household_settings` con RLS)
+  - [x] Arranque desde cero: eliminación de datos predeterminados (Facundo, Junín, sesión predeterminada), nuevo flujo de ingreso/creación de hogar
+  - [x] Pruebas de persistencia, sincronización multidispositivo y usuario nuevo sin datos
+  - [x] Snippet SQL en `SETUP.md` para limpieza de datos de prueba
 - [ ] **Bloque 4: Acceso Solo para Quienes Compran**
   - [ ] Variable `ACCESS_MODE` ("closed" por defecto, "open" para tests), verificación en servidor y pantalla de acceso/paywall
   - [ ] Pantalla pública para no autenticados con precios leídos del servidor

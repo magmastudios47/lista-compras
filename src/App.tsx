@@ -15,7 +15,9 @@ import { useShoppingList } from './hooks/useShoppingList';
 import { usePantry } from './hooks/usePantry';
 import { useChefAi } from './hooks/useChefAi';
 import { useHousehold } from './context/HouseholdContext';
+import { useAuth } from './context/AuthContext';
 import { useOfflineSync } from './context/OfflineSyncContext';
+import { UserSetupFlow } from './components/auth/UserSetupFlow';
 import { STORAGE_KEYS } from './lib/constants';
 import { ShoppingItem } from './types';
 import { pantrySyncManager } from './lib/pantryAutoSync';
@@ -35,7 +37,8 @@ export const App: React.FC = () => {
   const [isMpModalOpen, setIsMpModalOpen] = useState(false);
 
   const { isOnline } = useOfflineSync();
-  const { household, remainingQueries, updateHouseholdSettings } = useHousehold();
+  const { user, loading: authLoading } = useAuth();
+  const { household, loading: householdLoading, remainingQueries, updateHouseholdSettings } = useHousehold();
 
   const {
     items,
@@ -134,6 +137,18 @@ export const App: React.FC = () => {
         }}
       />
     );
+  }
+
+  if (authLoading || householdLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-patagonia-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || !user.displayName || !household) {
+    return <UserSetupFlow />;
   }
 
   return (

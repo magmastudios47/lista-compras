@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ChefMenuResponse, DiscountComparisonResult, MealType, MenuDay, MenuItemMeal, PantryItem } from '../../types';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useChefAi } from '../../hooks/useChefAi';
+import { useSettings } from '../../context/SettingsContext';
+import { SaveIndicator } from '../common/SaveIndicator';
 import {
   CalendarDays,
   Sparkles,
@@ -48,11 +50,21 @@ const PROFILE_OPTIONS = [
   'Otro',
 ];
 
+const DIETARY_RESTRICTIONS_OPTIONS = [
+  'Sin TACC / Celíaco',
+  'Vegetariano',
+  'Vegano',
+  'Sin lactosa',
+  'Bajo en sodio',
+  'Sin mariscos',
+];
+
 export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   pantryItems,
   onAddIngredientsToShoppingList,
 }) => {
   const { isPremium, remainingQueries } = useHousehold();
+  const { userPreferences, householdSettings, updateUserPreferences, updateHouseholdSettings } = useSettings();
   const {
     generateWeeklyMenu,
     regenerateSingleMeal,
@@ -61,22 +73,13 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     isAiDemoMode,
   } = useChefAi();
 
-  // Configuración de comidas por día (Lunes a Domingo)
-  const [daySelections, setDaySelections] = useState<Record<string, MealType[]>>({
-    Lunes: ['almuerzo', 'cena'],
-    Martes: ['almuerzo', 'cena'],
-    Miércoles: ['almuerzo', 'cena'],
-    Jueves: ['almuerzo', 'cena'],
-    Viernes: ['almuerzo', 'cena'],
-    Sábado: ['almuerzo', 'cena'],
-    Domingo: ['almuerzo', 'cena'],
-  });
-
-  // Perfil u objetivo
-  const [targetProfile, setTargetProfile] = useState<string>('Comer más sano');
-  const [profileDetail, setProfileDetail] = useState<string>('');
-  const [persons, setPersons] = useState<number>(4);
-  const [mandatoryDishes, setMandatoryDishes] = useState<string>('');
+  // Estados persistentes compartidos del hogar y usuario
+  const daySelections = householdSettings.weeklyMenuDaysConfig;
+  const targetProfile = userPreferences.targetProfile;
+  const profileDetail = userPreferences.profileDetail;
+  const persons = householdSettings.weeklyMenuPersons;
+  const mandatoryDishes = householdSettings.weeklyMenuMandatoryDishes;
+  const dietaryRestrictions = householdSettings.dietaryRestrictions;
 
   // Menú generado y lista unificada
   const [generatedMenu, setGeneratedMenu] = useState<ChefMenuResponse | null>(null);
@@ -84,13 +87,13 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   const [editingMeal, setEditingMeal] = useState<{ dayIndex: number; mealIndex: number; name: string } | null>(null);
   const [regeneratingMealKey, setRegeneratingMealKey] = useState<string | null>(null);
 
-  // Atajos para selección masiva
+  // Atajos para selección masiva con persistencia automática
   const handleSelectAllMealsAllDays = () => {
     const all: Record<string, MealType[]> = {};
     DAYS_OF_WEEK.forEach((d) => {
       all[d] = ['desayuno', 'almuerzo', 'merienda', 'cena'];
     });
-    setDaySelections(all);
+    updateHouseholdSettings({ weeklyMenuDaysConfig: all });
   };
 
   const handleSelectLunchAndDinnerOnly = () => {
@@ -98,7 +101,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     DAYS_OF_WEEK.forEach((d) => {
       ld[d] = ['almuerzo', 'cena'];
     });
-    setDaySelections(ld);
+    updateHouseholdSettings({ weeklyMenuDaysConfig: ld });
   };
 
   const handleClearAllMealSelections = () => {
@@ -106,16 +109,38 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     DAYS_OF_WEEK.forEach((d) => {
       empty[d] = [];
     });
-    setDaySelections(empty);
+    updateHouseholdSettings({ weeklyMenuDaysConfig: empty });
   };
 
   const toggleDayMeal = (day: string, meal: MealType) => {
-    setDaySelections((prev) => {
-      const current = prev[day] || [];
-      const exists = current.includes(meal);
-      const next = exists ? current.filter((m) => m !== meal) : [...current, meal];
-      return { ...prev, [day]: next };
-    });
+    const current = daySelections[day] || [];
+    const exists = current.includes(meal);
+    const next = exists ? current.filter((m) => m !== meal) : [...current, meal];
+    updateHouseholdSettings({ weeklyMenuDaysConfig: { ...daySelections, [day]: next } });
+  };
+
+  const setTargetProfile = (opt: string) => {
+    updateUserPreferences({ targetProfile: opt });
+  };
+
+  const setProfileDetail = (detail: string) => {
+    updateUserPreferences({ profileDetail: detail });
+  };
+
+  const setPersons = (p: number) => {
+    updateHouseholdSettings({ weeklyMenuPersons: p });
+  };
+
+  const setMandatoryDishes = (dishes: string) => {
+    updateHouseholdSettings({ weeklyMenuMandatoryDishes: dishes });
+  };
+
+  const toggleDietaryRestriction = (tag: string) => {
+    const exists = dietaryRestrictions.includes(tag);
+    const next = exists
+      ? dietaryRestrictions.filter((t) => t !== tag)
+      : [...dietaryRestrictions, tag];
+    updateHouseholdSettings({ dietaryRestrictions: next });
   };
 
   // Generar menú semanal con IA
@@ -136,6 +161,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
         profileDetail,
         persons,
         mandatoryDishes,
+        dietaryRestrictions,
         pantry: pantryItems,
       });
 
@@ -229,6 +255,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
             <div>
               <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span>Menú Semanal</span>
+                <SaveIndicator className="ml-1" />
                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                   Premium
                 </span>
@@ -564,6 +591,30 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                   className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
                 >
                 </input>
+              </div>
+            </div>
+
+            {/* Restricciones alimentarias compartidas del hogar */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 flex items-center justify-between">
+                <span>Restricciones alimentarias del hogar</span>
+                <SaveIndicator />
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {DIETARY_RESTRICTIONS_OPTIONS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleDietaryRestriction(tag)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
+                      dietaryRestrictions.includes(tag)
+                        ? 'bg-rose-500 text-white shadow-sm'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
             </div>
           </div>

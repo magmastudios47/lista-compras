@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
+import { SaveIndicator } from '../common/SaveIndicator';
 import { Share2, Sparkles, Moon, Sun, Wifi, WifiOff, Users, Check } from 'lucide-react';
 
 interface HeaderProps {
@@ -16,17 +18,13 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { household, remainingQueries, isPremium, getWhatsAppInviteUrl } = useHousehold();
   const { user } = useAuth();
+  const { userPreferences, updateUserPreferences } = useSettings();
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const isDark = userPreferences.theme === 'dark' || (userPreferences.theme === 'system' && document.documentElement.classList.contains('dark'));
 
   const toggleTheme = () => {
-    const nextDark = !isDark;
-    setIsDark(nextDark);
-    if (nextDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    const nextTheme = isDark ? 'light' : 'dark';
+    updateUserPreferences({ theme: nextTheme });
   };
 
   const handleShareWhatsApp = () => {
@@ -75,6 +73,8 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Acciones del Header */}
         <div className="flex items-center gap-1.5">
+          <SaveIndicator className="mr-1" />
+
           {/* Badge Cuota Chef IA */}
           <button
             onClick={onOpenChefModal}

@@ -216,5 +216,72 @@ Para evitar la confirmación manual cada vez que comprás un producto:
 
 ---
 
+## Paso 10: Ronda 5 - Paso 1: Migraciones y Limpieza de Datos de Prueba
+
+### A. Comando exacto para aplicar las migraciones de Ronda 5
+
+Para aplicar las migraciones de la Ronda 5 en tu proyecto de Supabase, podés hacerlo con Supabase CLI o directamente desde el **SQL Editor** del panel web de Supabase:
+
+#### Opción 1: Con Supabase CLI (terminal local)
+```bash
+npx supabase db push
+```
+O aplicar individualmente con:
+```bash
+# 1. Purgar caché antiguo de recetas con ingredientes de respaldo
+npx supabase migration apply --file supabase/migrations/20261012_ronda5_cache_purge.sql
+
+# 2. Crear tablas de preferencias de usuario y ajustes compartidos de hogar
+npx supabase migration apply --file supabase/migrations/20261012_ronda5_settings_and_preferences.sql
+```
+
+#### Opción 2: Desde el Editor SQL de Supabase (Web)
+1. Entrá a tu proyecto en [https://supabase.com](https://supabase.com) -> **SQL Editor** -> **New Query**.
+2. Copiá y ejecutá el contenido de:
+   - `supabase/migrations/20261012_ronda5_cache_purge.sql`
+   - `supabase/migrations/20261012_ronda5_settings_and_preferences.sql`
+3. Hacé click en **"Run"**.
+
+---
+
+### B. SQL para borrar datos de prueba y comenzar de cero (Editor SQL de Supabase)
+
+Si querés reiniciar tu base de datos remota para empezar 100% limpia sin usuarios de prueba, hogares ni datos residuales de rondas anteriores, ejecutá este script en el **SQL Editor** de Supabase (este script **NO** se ejecuta automáticamente; solo vos decidís cuándo correrlo):
+
+```sql
+-- ========================================================================
+-- SCRIPT DE LIMPIEZA DE DATOS DE PRUEBA (EJECUTAR EN SUPABASE SQL EDITOR)
+-- ========================================================================
+
+-- 1. Vaciar elementos de listas y despensas
+DELETE FROM public.shopping_items;
+DELETE FROM public.pantry_items;
+
+-- 2. Vaciar registros de uso y caché de IA
+DELETE FROM public.ai_usage_log;
+DELETE FROM public.ai_cache;
+
+-- 3. Vaciar notificaciones push
+DELETE FROM public.push_subscriptions;
+
+-- 4. Vaciar pagos, licencias y suscripciones
+DELETE FROM public.payments;
+DELETE FROM public.household_licenses;
+DELETE FROM public.licenses;
+
+-- 5. Vaciar ajustes y preferencias
+DELETE FROM public.household_settings;
+DELETE FROM public.user_preferences;
+
+-- 6. Vaciar miembros y hogares
+DELETE FROM public.household_members;
+DELETE FROM public.households;
+
+-- NOTA OPCIONAL: Si querés borrar todas las cuentas de usuarios autenticados en Supabase Auth:
+-- DELETE FROM auth.users;
+```
+
+---
+
 ## ¿Dudas o Soporte?
 Cualquier cambio de recetas, ingredientes patagónicos o ajustes de vocabulario se pueden consultar y modificar en la skill `.agents/skills/chef-ia/SKILL.md` y en las decisiones de diseño en `docs/DECISIONES.md`.

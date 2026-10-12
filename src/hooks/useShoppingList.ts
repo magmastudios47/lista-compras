@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Category, ShoppingItem, Unit } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { useAuth } from '../context/AuthContext';
-import { isConfigured, INITIAL_SHOPPING_SEED, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
+import { isConfigured, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { normalizeString, singularizeIngredient } from '../lib/normalizer';
 import { applySoftDelete, restoreSoftDeleted, commitPermanentDelete, filterActiveItems } from '../lib/clearUndoManager';
@@ -16,15 +16,20 @@ export function useShoppingList() {
 
   // Carga inicial y almacenamiento offline
   useEffect(() => {
-    const activeHousehold = household || MOCK_HOUSEHOLD;
+    if (!household) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+
+    const activeHousehold = household;
 
     // 1. Cargar desde offlineStorage de inmediato (optimistic / offline)
     const localItems = offlineStorage.getShoppingItems();
     if (localItems.length > 0) {
       setItems(localItems.filter((i) => i.household_id === activeHousehold.id));
     } else {
-      setItems(INITIAL_SHOPPING_SEED);
-      offlineStorage.saveShoppingItems(INITIAL_SHOPPING_SEED);
+      setItems([]);
     }
 
     if (isDemoMode || !isConfigured) {
@@ -102,7 +107,7 @@ export function useShoppingList() {
       category: Category = 'otros',
       estimatedPrice?: number
     ): Promise<ShoppingItem> => {
-      const activeHousehold = household || MOCK_HOUSEHOLD;
+      const activeHouseholdId = household?.id || '';
 
       const norm = singularizeIngredient(name);
       const existing = items.find((i) => !i.is_bought && i.normalized_name === norm && i.unit === unit);
@@ -142,7 +147,7 @@ export function useShoppingList() {
         // Crear nuevo
         finalItem = {
           id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          household_id: activeHousehold.id,
+          household_id: activeHouseholdId,
           name: name.trim(),
           normalized_name: norm,
           quantity,

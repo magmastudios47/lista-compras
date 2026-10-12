@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChefCookResponse,
   ChefSuggestRecipe,
@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { useChefAi } from '../../hooks/useChefAi';
 import { useHousehold } from '../../context/HouseholdContext';
+import { useSettings } from '../../context/SettingsContext';
 import { calculateRecipeEstimatedCost } from '../../lib/priceMemory';
 import {
   Sparkles,
@@ -42,6 +43,7 @@ export const ChefModal: React.FC<ChefModalProps> = ({
   onAddIngredientsToShoppingList,
 }) => {
   const { household } = useHousehold();
+  const { householdSettings, updateHouseholdSettings } = useSettings();
   const { loading, error, askToCook, askToSuggest, remainingQueries, isAiDemoMode } = useChefAi();
 
   const [activeTab, setActiveTab] = useState<'cocinar' | 'sugerir'>('cocinar');
@@ -49,7 +51,14 @@ export const ChefModal: React.FC<ChefModalProps> = ({
   // Estado Modo Cocinar
   const [mealInput, setMealInput] = useState('');
   const [persons, setPersons] = useState(4);
-  const [restrictions, setRestrictions] = useState<string[]>([]);
+  const [restrictions, setRestrictions] = useState<string[]>(householdSettings.dietaryRestrictions || []);
+
+  useEffect(() => {
+    if (householdSettings.dietaryRestrictions) {
+      setRestrictions(householdSettings.dietaryRestrictions);
+    }
+  }, [householdSettings.dietaryRestrictions]);
+
   const [cookPreview, setCookPreview] = useState<{
     response: ChefCookResponse;
     comparisons: DiscountComparisonResult[];
@@ -66,9 +75,11 @@ export const ChefModal: React.FC<ChefModalProps> = ({
   if (!isOpen) return null;
 
   const toggleRestriction = (tag: string) => {
-    setRestrictions((prev) =>
-      prev.includes(tag) ? prev.filter((r) => r !== tag) : [...prev, tag]
-    );
+    const next = restrictions.includes(tag)
+      ? restrictions.filter((r) => r !== tag)
+      : [...restrictions, tag];
+    setRestrictions(next);
+    updateHouseholdSettings({ dietaryRestrictions: next });
   };
 
   // Manejo de consulta "Cocinar"

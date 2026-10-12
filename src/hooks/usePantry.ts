@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Category, PantryItem, Unit } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
-import { isConfigured, INITIAL_PANTRY_SEED, MOCK_HOUSEHOLD, supabase } from '../lib/supabaseClient';
+import { isConfigured, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
 import { singularizeIngredient } from '../lib/normalizer';
 import { pantrySyncManager } from '../lib/pantryAutoSync';
@@ -12,15 +12,20 @@ export function usePantry() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const activeHousehold = household || MOCK_HOUSEHOLD;
+    if (!household) {
+      setPantryItems([]);
+      setLoading(false);
+      return;
+    }
+
+    const activeHousehold = household;
 
     // 1. Cargar desde offlineStorage de inmediato
     const cached = offlineStorage.getPantryItems();
     if (cached.length > 0) {
       setPantryItems(cached.filter((p) => p.household_id === activeHousehold.id));
     } else {
-      setPantryItems(INITIAL_PANTRY_SEED);
-      offlineStorage.savePantryItems(INITIAL_PANTRY_SEED);
+      setPantryItems([]);
     }
 
     if (!isConfigured) {
@@ -97,7 +102,7 @@ export function usePantry() {
       unit: Unit | null = null,
       category: Category = 'almacen'
     ): Promise<PantryItem> => {
-      const activeHousehold = household || MOCK_HOUSEHOLD;
+      const activeHouseholdId = household?.id || '';
 
       const norm = singularizeIngredient(name);
       const existing = pantryItems.find((p) => p.normalized_name === norm);
@@ -137,7 +142,7 @@ export function usePantry() {
       } else {
         itemResult = {
           id: `pantry_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          household_id: activeHousehold.id,
+          household_id: activeHouseholdId,
           name: name.trim(),
           normalized_name: norm,
           quantity,

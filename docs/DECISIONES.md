@@ -206,3 +206,41 @@ Este documento registra todas las decisiones autónomas tomadas durante el desar
 
 
 
+
+
+---
+
+### Decisión 20: Ronda 5 Bloque 0 y 1 - Regla Global Anti-Fallbacks Silenciosos, Cobertura del Pedido y Purga de Caché
+- **Contexto**: Diagnóstico de Bugs A y B reveló que ante fallos en la Edge Function, el cliente devolvía silenciosamente un menú mock y una receta con arroz, cebolla, tomate perita y aceite de girasol, descontando cuota del usuario.
+- **Decisión**:
+  1. **Regla Global "Nunca Contenido Falso en Silencio"**: Se eliminaron todos los caminos de mock o fallback en producción. Ante cualquier fallo de la IA (sin clave, 429, timeout, error JSON), el usuario ve un mensaje amable y transparente, no se agregan productos a la lista y no se cobran consultas/créditos.
+  2. **Modo Demo Explícito (`VITE_AI_DEMO_MODE=true`)**: Mocks solo operan si la bandera está activada para desarrollo, con un badge visible "MODO DEMO" y sin descontar consultas.
+  3. **Trazabilidad de Respuestas (`origen: 'ia' | 'cache' | 'demo'`)**: Cada respuesta informa su origen y se audita en `ai_usage_log`.
+  4. **Validador de Cobertura del Pedido (`orderCoverageValidator.ts`)**: Los productos mencionados en el pedido (ej. papa y acelga) deben estar presentes en los ingredientes resultantes (salvo exclusiones "sin X"). Si falta alguno, se reintenta una única vez guiando al modelo sin costo adicional.
+  5. **Versión de Caché (`PROMPT_VERSION = 'v1.5.0'`) y Purga**: Clave de caché incluye pedido normalizado, personas, restricciones ordenadas y `PROMPT_VERSION`. Migración `20261012_ronda5_cache_purge.sql` purga entradas heredadas con recetas genéricas.
+
+---
+
+### Decisión 21: Ronda 5 Bloque 2 - Menú Semanal Sin Repeticiones, por_que_encaja Único y Rotación entre Semanas
+- **Contexto**: Los platos del menú semanal seguían un patrón de 3 ciclos con textos idénticos en `por_que_encaja` y podían repetirse de una semana a otra.
+- **Decisión**:
+  1. **por_que_encaja Estrictamente Único**: Validación en cliente y servidor que rechaza planes con justificaciones repetidas. Cada plato debe justificar por qué encaja con su comida y objetivo nutricional.
+  2. **Semilla Aleatoria y Rotación Histórica (`weeklyMenuHistory.ts`)**: Cada pedido envía una semilla aleatoria (`semilla`) y los platos de los últimos 2 menús generados por el hogar (`platos_recientes_evitar`), asegurando que no se repitan platos entre semanas consecutivas.
+  3. **Regeneración Específica**: Se implementaron las funciones "Regenerar este plato" (modo `regenerar_plato`) y "Regenerar la semana".
+
+---
+
+### Decisión 22: Ronda 5 Bloque 3 - Persistencia Automática, Sincronización y Arranque Limpio desde Cero
+- **Contexto**: Las configuraciones se reiniciaban al recargar, la app arrancaba con datos ficticios ("Facundo", "Cabaña Los Pehuenes", "Junín de los Andes") y productos de despensa precargados.
+- **Decisión**:
+  1. **Tablas Persistentes con RLS**:
+     - `public.user_preferences` (por usuario): `theme` ('light' | 'dark' | 'system'), `target_profile`, `profile_detail`, `ui_preferences`. RLS por `auth.uid()`.
+     - `public.household_settings` (por hogar, compartida): `pantry_add_mode`, `pantry_exclude_cleaning`, `dietary_restrictions`, `weekly_menu_days_config`, `weekly_menu_persons`, `weekly_menu_mandatory_dishes`, `city`. RLS por pertenencia al hogar.
+  2. **Persistencia Automática con Debounce (~500ms) e Indicador Discreto**:
+     - Se creó `SettingsContext` que escribe de inmediato en `localStorage` (offline-first instantáneo) y dispara un guardado debounced de 500ms a Supabase.
+     - Indicador discreto `<SaveIndicator />` con badge "Guardado" en encabezados. Sincronización multidispositivo mediante Supabase Realtime `postgres_changes`.
+     - Separación de responsabilidades: las restricciones alimentarias son del hogar; el perfil de objetivo nutricional es del usuario.
+  3. **Arranque desde Cero sin Datos Predeterminados**:
+     - Se eliminaron todos los mocks y auto-logins ("Facundo", "Los Pehuenes", semillas iniciales de productos).
+     - Flujo de bienvenida obligatorio: Ingreso -> Nombre para mostrar (vacío, obligatorio) -> "Crear mi hogar" (nombre vacío, ciudad opcional) o "Unirme con link o código".
+     - Al ingresar, las listas, despensa y menú inician completamente vacíos.

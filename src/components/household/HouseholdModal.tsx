@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useAuth } from '../../context/AuthContext';
-import { Users, Plus, KeyRound, Share2, Shield, X, Check, Copy, Archive } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
+import { SaveIndicator } from '../common/SaveIndicator';
+import { Users, Plus, KeyRound, Share2, Shield, X, Check, Copy, Archive, MapPin } from 'lucide-react';
 
 interface HouseholdModalProps {
   isOpen: boolean;
@@ -16,7 +18,9 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
 }) => {
   const { household, members, createHousehold, joinHouseholdByCode, getWhatsAppInviteUrl, updateHouseholdSettings } = useHousehold();
   const { user, signOut } = useAuth();
+  const { householdSettings, updateHouseholdSettings: updateSharedSettings } = useSettings();
   const [newHhName, setNewHhName] = useState('');
+  const [newHhCity, setNewHhCity] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -61,8 +65,9 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
             <div className="w-8 h-8 rounded-xl bg-patagonia-100 dark:bg-patagonia-950 text-patagonia-600 dark:text-patagonia-400 flex items-center justify-center font-bold">
               <Users className="w-4 h-4" />
             </div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">
-              Configuración del Hogar
+            <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
+              <span>Configuración del Hogar</span>
+              <SaveIndicator className="ml-1" />
             </h3>
           </div>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -134,19 +139,25 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
 
         {/* Ajuste del hogar: Al marcar como comprado */}
         <div className="mt-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-3">
-          <div className="flex items-center gap-2">
-            <Archive className="w-4 h-4 text-chef-500" />
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Al marcar producto como comprado:
-            </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Archive className="w-4 h-4 text-chef-500" />
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Al marcar como comprado:
+              </span>
+            </div>
+            <SaveIndicator />
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 text-center">
             <button
               type="button"
-              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'ask' })}
+              onClick={() => {
+                updateHouseholdSettings({ pantry_add_mode: 'ask' });
+                updateSharedSettings({ pantryAddMode: 'ask' });
+              }}
               className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
-                (household?.pantry_add_mode || 'ask') === 'ask'
+                (householdSettings.pantryAddMode || 'ask') === 'ask'
                   ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
                   : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}
@@ -155,9 +166,12 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'auto' })}
+              onClick={() => {
+                updateHouseholdSettings({ pantry_add_mode: 'auto' });
+                updateSharedSettings({ pantryAddMode: 'auto' });
+              }}
               className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
-                household?.pantry_add_mode === 'auto'
+                householdSettings.pantryAddMode === 'auto'
                   ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
                   : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}
@@ -166,9 +180,12 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => updateHouseholdSettings({ pantry_add_mode: 'never' })}
+              onClick={() => {
+                updateHouseholdSettings({ pantry_add_mode: 'never' });
+                updateSharedSettings({ pantryAddMode: 'never' });
+              }}
               className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
-                household?.pantry_add_mode === 'never'
+                householdSettings.pantryAddMode === 'never'
                   ? 'bg-patagonia-600 text-white border-patagonia-600 shadow-sm'
                   : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}
@@ -180,12 +197,30 @@ export const HouseholdModal: React.FC<HouseholdModalProps> = ({
           <label className="flex items-center gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
             <input
               type="checkbox"
-              checked={household?.pantry_exclude_cleaning !== false}
-              onChange={(e) => updateHouseholdSettings({ pantry_exclude_cleaning: e.target.checked })}
+              checked={householdSettings.pantryExcludeCleaning !== false}
+              onChange={(e) => {
+                updateHouseholdSettings({ pantry_exclude_cleaning: e.target.checked });
+                updateSharedSettings({ pantryExcludeCleaning: e.target.checked });
+              }}
               className="rounded text-patagonia-600 focus:ring-patagonia-500 w-4 h-4"
             />
             <span>No sumar productos de limpieza</span>
           </label>
+
+          {/* Ciudad o zona del hogar */}
+          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+            <label className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-patagonia-500" />
+              <span>Ciudad o zona (opcional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: Junín de los Andes, Bariloche..."
+              value={householdSettings.city || ''}
+              onChange={(e) => updateSharedSettings({ city: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-patagonia-500"
+            />
+          </div>
         </div>
 
         {/* Unirse a otro hogar con código */}

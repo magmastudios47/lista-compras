@@ -311,6 +311,7 @@ export function useChefAi() {
       profileDetail?: string;
       persons?: number;
       mandatoryDishes?: string;
+      dietaryRestrictions?: string[];
       pantry: PantryItem[];
     }): Promise<{
       response: ChefMenuResponse;
@@ -334,6 +335,7 @@ export function useChefAi() {
                 objetivo_detalle: params.profileDetail,
                 personas: p,
                 platos_obligatorios: params.mandatoryDishes,
+                restricciones: params.dietaryRestrictions || [],
                 household_id: household.id,
                 semilla: `${Date.now()}_${Math.random()}`,
                 platos_recientes_evitar: getRecentHouseholdDishes(household.id),

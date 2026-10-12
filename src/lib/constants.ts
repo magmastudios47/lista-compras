@@ -40,6 +40,8 @@ export const STORAGE_KEYS = {
   USAGE_QUOTA: 'compars_usage_quota',
   WEEKLY_MENU: 'compars_weekly_menu',
   PANTRY_ORIGINS: 'compars_pantry_origins',
+  USER_PREFERENCES: 'compars_user_preferences',
+  HOUSEHOLD_SETTINGS: 'compars_household_settings',
 };
 
 export const MAX_CHEF_MONTHLY_FREE = 40;
