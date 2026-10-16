@@ -180,6 +180,13 @@ export function filterAbsurdIngredients(
         const normIng = normalizeString(ing.nombre);
         const isForbidden = rule.forbiddenWords.some((word) => {
           const normWord = normalizeString(word);
+          // Si el usuario pidió explícitamente este ingrediente (en singular o plural) y no dijo "sin <ingrediente>", nunca filtrarlo
+          const baseStem = normWord.replace(/s$/, '');
+          const stemRegex = new RegExp(`\\b${baseStem}(?:s|es)?\\b`);
+          const sinRegex = new RegExp(`\\b(?:sin|no)\\s+${baseStem}(?:s|es)?\\b`);
+          if (stemRegex.test(normInput) && !sinRegex.test(normInput)) {
+            return false;
+          }
           // Coincidencia exacta o palabra clave completa
           return (
             normIng === normWord ||

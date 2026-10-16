@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { extractEdgeFunctionError } from '../../hooks/useChefAi';
 import { useHousehold, PlanType } from '../../context/HouseholdContext';
 import { useAuth } from '../../context/AuthContext';
 import { isConfigured, supabase } from '../../lib/supabaseClient';
@@ -8,12 +9,14 @@ interface MercadoPagoModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'plans' | 'recharges';
+  initialPlan?: 'base' | 'premium' | 'upgrade';
 }
 
 export const MercadoPagoModal: React.FC<MercadoPagoModalProps> = ({
   isOpen,
   onClose,
   initialTab = 'plans',
+  initialPlan,
 }) => {
   const { household, currentPlan } = useHousehold();
   const { user } = useAuth();
@@ -21,15 +24,39 @@ export const MercadoPagoModal: React.FC<MercadoPagoModalProps> = ({
     initialTab || (currentPlan === 'premium' ? 'recharges' : 'plans')
   );
   const [selectedPlan, setSelectedPlan] = useState<'base' | 'premium' | 'upgrade'>(
-    currentPlan === 'base' ? 'upgrade' : 'premium'
+    initialPlan || (currentPlan === 'base' ? 'upgrade' : 'premium')
   );
+  const [exchangeRate, setExchangeRate] = useState<number>(1350);
+
+  useEffect(() => {
+    if (initialPlan) {
+      setSelectedPlan(initialPlan);
+    }
+  }, [initialPlan]);
+
+  useEffect(() => {
+    if (!isOpen || !isConfigured) return;
+    supabase
+      .from('exchange_rates')
+      .select('rate')
+      .eq('currency_from', 'USD')
+      .eq('currency_to', 'ARS')
+      .maybeSingle()
+      .then(
+        ({ data }) => {
+          if (data?.rate && Number(data.rate) >= 500) {
+            setExchangeRate(Number(data.rate));
+          }
+        },
+        () => {}
+      );
+  }, [isOpen]);
   const [selectedPack, setSelectedPack] = useState<'pack_25' | 'pack_60' | 'pack_150'>('pack_60');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const exchangeRate = 1350; // Cotización ARS/USD de referencia
 
   // Precios oficiales definidos en servidor
   const planPricesUsd = {
@@ -67,8 +94,9 @@ export const MercadoPagoModal: React.FC<MercadoPagoModalProps> = ({
           },
         });
 
-        if (error || !data) {
-          throw new Error(error?.message || data?.error || 'Error al conectar con la pasarela de pago.');
+        if (error || !data || data.error) {
+          const realErr = await extractEdgeFunctionError(error, data);
+          throw new Error(typeof realErr === 'string' ? realErr : realErr?.message || 'Error al conectar con la pasarela de pago.');
         }
 
         const checkoutUrl = data.init_point || data.sandbox_init_point;

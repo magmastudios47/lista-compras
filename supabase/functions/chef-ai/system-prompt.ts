@@ -183,6 +183,35 @@ Devolvé:
  * Devuelve el prompt del sistema optimizado para el modo solicitado,
  * colocando el núcleo común primero para maximizar el caché de prefijo de Google Gemini.
  */
+export const PROMPT_MODE_DETALLE_DIA_MENU = `
+# MODO ESPECÍFICO: "detalle_dia_menu"
+Se te pasa un día de la semana ("dia") y la lista de comidas planificadas para ese día ("comidas", cada una con "tipo", "plato" y opcionalmente "bebida") junto con la cantidad de "personas".
+Para cada comida del día:
+1. Escribí primero los "pasos" claros de preparación (entre 4 y 8 pasos con cantidades exactas para las personas indicadas).
+2. Extraé la lista completa de "ingredientes" de esos pasos (incluyendo los ingredientes de la bebida en desayuno o merienda, salvo agua/sal).
+Devolvé SIEMPRE este esquema JSON exacto:
+{
+  "modo": "detalle_dia_menu",
+  "dia": "lunes",
+  "comidas": [
+    {
+      "tipo": "almuerzo",
+      "plato": "Pollo al horno con batatas",
+      "bebida": null,
+      "pasos": [
+        "1. Acomodar 1 kg de pollo en presas en una asadera y condimentar.",
+        "2. Pelar y cortar 1 kg de batata en cuñas y rodear el pollo.",
+        "3. Hornear a 200°C durante 50 minutos hasta dorar."
+      ],
+      "ingredientes": [
+        { "nombre": "pollo", "cantidad": 1, "unidad": "kg", "categoria": "carniceria", "es_basico": false, "opcional": false, "item_despensa_coincidente": null },
+        { "nombre": "batata", "cantidad": 1, "unidad": "kg", "categoria": "verduleria", "es_basico": false, "opcional": false, "item_despensa_coincidente": null }
+      ]
+    }
+  ],
+  "advertencias": []
+}`;
+
 export function getSystemPromptForMode(modo: string): string {
   switch (modo) {
     case 'cocinar':
@@ -198,7 +227,7 @@ export function getSystemPromptForMode(modo: string): string {
     case 'interpretar_despensa':
       return `${CORE_SYSTEM_PROMPT}\n\n${PROMPT_MODE_INTERPRETAR}`;
     case 'detalle_dia_menu':
-      return `${CORE_SYSTEM_PROMPT}\n\n${PROMPT_MODE_COCINAR}`;
+      return `${CORE_SYSTEM_PROMPT}\n\n${PROMPT_MODE_DETALLE_DIA_MENU}`;
     default:
       return `${CORE_SYSTEM_PROMPT}\n\n${PROMPT_MODE_COCINAR}`;
   }

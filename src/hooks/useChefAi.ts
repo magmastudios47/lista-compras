@@ -29,23 +29,60 @@ export const isAiDemoMode =
   typeof import.meta !== 'undefined' &&
   Boolean(import.meta.env?.VITE_AI_DEMO_MODE === 'true');
 
+export async function extractEdgeFunctionError(fnError: any, data: any): Promise<any> {
+  if (data && typeof data === 'object' && data.error) {
+    return data.error;
+  }
+  if (fnError && typeof fnError === 'object' && fnError.context) {
+    try {
+      const ctx = fnError.context;
+      if (typeof ctx.json === 'function') {
+        const clone = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+        const body = await clone.json();
+        if (body && body.error) return body.error;
+      } else if (typeof ctx.text === 'function') {
+        const clone = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+        const txt = await clone.text();
+        if (txt) {
+          try {
+            const parsed = JSON.parse(txt);
+            if (parsed.error) return parsed.error;
+          } catch {
+            return txt;
+          }
+        }
+      }
+    } catch {}
+  }
+  return fnError || 'Respuesta inválida del Chef IA.';
+}
+
 export function formatFriendlyAiError(err: any): string {
   if (!err) return 'Error al comunicarse con el Chef IA. No se descontaron créditos.';
   const msg = typeof err === 'string' ? err : err.message || err.error || JSON.stringify(err);
   const lower = String(msg).toLowerCase();
+  if (lower.includes('no pudo incluir todos los ingredientes')) {
+    return String(msg);
+  }
+  if (lower.includes('tope diario') || lower.includes('15 créditos por día')) {
+    return 'Alcanzaste el tope diario de seguridad de tu hogar (15 créditos por día). Probá de nuevo mañana. (No se descontaron créditos)';
+  }
   if (lower.includes('429') || lower.includes('rate limit') || lower.includes('muy ocupado')) {
     return 'El Chef está recibiendo muchas consultas en este momento. Por favor probá de nuevo en un minuto. (No se descontaron créditos)';
   }
   if (lower.includes('quota') || lower.includes('límite mensual') || lower.includes('cuota') || lower.includes('credito') || lower.includes('crédito')) {
     return 'Alcanzaste el límite de consultas de tu plan. No se descontaron créditos adicionales.';
   }
+  if (lower.includes('licencia activa') || lower.includes('license_required')) {
+    return 'Este hogar no cuenta con una licencia activa de Lista Compars.';
+  }
   if (lower.includes('premium')) {
     return 'Esta función requiere el plan Premium de tu hogar.';
   }
-  if (lower.includes('503') || lower.includes('unavailable') || lower.includes('alta demanda')) {
+  if (lower.includes('503') || lower.includes('unavailable') || lower.includes('alta demanda') || lower.includes('presupuesto')) {
     return 'El servicio de IA tiene alta demanda momentánea. Por favor reintentá en unos instantes. (Sin descuento de créditos)';
   }
-  if (lower.includes('500') || lower.includes('internal server')) {
+  if (lower.includes('500') || lower.includes('internal server') || lower.includes('non-2xx')) {
     return 'Error en el servidor del Chef IA. Por favor reintentá en unos momentos. (No se descontaron créditos)';
   }
   if (lower.includes('timeout') || lower.includes('network') || lower.includes('conexión') || lower.includes('fetch')) {
@@ -55,7 +92,7 @@ export function formatFriendlyAiError(err: any): string {
 }
 
 export function useChefAi() {
-  const { household, remainingQueries, incrementChefUsage } = useHousehold();
+  const { household, remainingQueries, incrementChefUsage, refreshCredits } = useHousehold();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,13 +127,15 @@ export function useChefAi() {
               },
             });
 
-            if (!fnError && data) {
+            if (!fnError && data && !data.error) {
               cookData = data as ChefCookResponse;
               cookData.origen = cookData.origen || 'ia';
-              incrementChefUsage();
+              incrementChefUsage(1);
+              refreshCredits();
             } else {
               if (!isAiDemoMode) {
-                throw new Error(formatFriendlyAiError(fnError || 'Respuesta inválida del Chef IA.'));
+                const realErr = await extractEdgeFunctionError(fnError, data);
+                throw new Error(formatFriendlyAiError(realErr));
               }
               // Modo demo explícito: nunca descuenta créditos
               cookData = generateMockCookResponse(mealRequest, persons, dietaryRestrictions, pantry);
@@ -171,13 +210,15 @@ export function useChefAi() {
               },
             });
 
-            if (!fnError && data) {
+            if (!fnError && data && !data.error) {
               suggestData = data as ChefSuggestResponse;
               suggestData.origen = suggestData.origen || 'ia';
-              incrementChefUsage();
+              incrementChefUsage(1);
+              refreshCredits();
             } else {
               if (!isAiDemoMode) {
-                throw new Error(formatFriendlyAiError(fnError || 'Respuesta inválida del Chef IA.'));
+                const realErr = await extractEdgeFunctionError(fnError, data);
+                throw new Error(formatFriendlyAiError(realErr));
               }
               suggestData = generateMockSuggestResponse(pantry, freeText);
               suggestData.origen = 'demo';
@@ -343,10 +384,9 @@ export function useChefAi() {
             });
 
             if (!stepAError && stepAData && Array.isArray(stepAData.comidas)) {
-              // Descuenta 3 consultas para el menú semanal completo una sola vez
-              incrementChefUsage();
-              incrementChefUsage();
-              incrementChefUsage();
+              // Descuenta 8 créditos para el menú semanal completo una sola vez
+              incrementChefUsage(8);
+              refreshCredits();
 
               const planComidas: PlanificarSemanaMeal[] = stepAData.comidas;
 
@@ -418,7 +458,8 @@ export function useChefAi() {
               };
             } else {
               if (!isAiDemoMode) {
-                throw new Error(formatFriendlyAiError(stepAError || 'Error al planificar el menú semanal.'));
+                const realErr = await extractEdgeFunctionError(stepAError, stepAData);
+                throw new Error(formatFriendlyAiError(realErr));
               }
               menuData = generateMockMenuResponse(params);
               menuData.origen = 'demo';
@@ -526,7 +567,8 @@ export function useChefAi() {
             });
 
             if (!invokeErr && data?.comida) {
-              incrementChefUsage();
+              incrementChefUsage(1);
+              refreshCredits();
               replacementMeal = {
                 tipo: data.comida.tipo,
                 nombre: data.comida.plato,
@@ -538,7 +580,8 @@ export function useChefAi() {
               };
             } else {
               if (!isAiDemoMode) {
-                throw new Error(formatFriendlyAiError(invokeErr || 'No se pudo regenerar el plato.'));
+                const realErr = await extractEdgeFunctionError(invokeErr, data);
+                throw new Error(formatFriendlyAiError(realErr));
               }
               replacementMeal = generateMockReplacementMeal(targetMeal.tipo, allDishesToAvoid, p);
             }

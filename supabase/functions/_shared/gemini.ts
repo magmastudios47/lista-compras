@@ -1,5 +1,6 @@
+declare const Deno: any;
 // Cliente y abstracción de Google Gemini API
-import { getSystemPromptForMode, CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt';
+import { getSystemPromptForMode, CHEF_SYSTEM_PROMPT } from '../chef-ai/system-prompt.ts';
 
 export interface GeminiCallOptions {
   systemPrompt?: string;
@@ -75,7 +76,8 @@ export class GeminiClient {
   async generateChefResponse<T>(
     options: GeminiCallOptions,
     validator: (raw: any) => T,
-    retryCount = 0
+    retryCount = 0,
+    fallbackModelOverride?: string
   ): Promise<GeminiResponse<T>> {
     if (!this.apiKey) {
       throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno.');
@@ -87,7 +89,7 @@ export class GeminiClient {
     const isFastMode =
       options.userData.modo === 'interpretar_items' ||
       options.userData.modo === 'interpretar_despensa';
-    const activeModel = isFastMode ? this.fastModel : this.chefModel;
+    const activeModel = fallbackModelOverride || (isFastMode ? this.fastModel : this.chefModel);
 
     // Inyectar datos del usuario estrictamente como DATOS estructurados
     const safePayload = {
@@ -107,6 +109,9 @@ export class GeminiClient {
         ingredientes_obligatorios: options.userData.ingredientes_obligatorios || null,
         platos_recientes_a_evitar: options.userData.platos_recientes_evitar || null,
         semilla_aleatoria: options.userData.semilla || null,
+        dia: options.userData.dia || null,
+        tipo: options.userData.tipo || null,
+        comidas: options.userData.comidas || null,
       },
     };
 
@@ -183,6 +188,22 @@ export class GeminiClient {
         throw new Error('El chef está muy ocupado, probá de nuevo en un minuto.');
       }
       throw new Error('El servicio de IA está experimentando alta demanda, intentá nuevamente.');
+    }
+
+    // Si el modelo configurado devuelve 404 (deprecado o no disponible en la cuenta), probar cadena de respaldo oficial
+    if (response.status === 404) {
+      const fallbackChain = [
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+      ].filter((m) => m !== activeModel);
+      const nextModel = fallbackChain[retryCount];
+      if (nextModel) {
+        console.warn(`[GeminiClient] Modelo ${activeModel} devolvió 404. Reintentando con ${nextModel}...`);
+        return this.generateChefResponse(options, validator, retryCount + 1, nextModel);
+      }
     }
 
     if (!response.ok) {

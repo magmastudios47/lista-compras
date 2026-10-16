@@ -4,7 +4,7 @@ import { useHousehold } from '../context/HouseholdContext';
 import { useAuth } from '../context/AuthContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
-import { normalizeString, singularizeIngredient } from '../lib/normalizer';
+import { normalizeString, singularizeIngredient, generateUuid, isValidUuid } from '../lib/normalizer';
 import { applySoftDelete, restoreSoftDeleted, commitPermanentDelete, filterActiveItems } from '../lib/clearUndoManager';
 import confetti from 'canvas-confetti';
 
@@ -46,7 +46,7 @@ export function useShoppingList() {
           .eq('household_id', activeHousehold.id)
           .order('created_at', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           setItems(data as ShoppingItem[]);
           offlineStorage.saveShoppingItems(data as ShoppingItem[]);
         }
@@ -146,7 +146,7 @@ export function useShoppingList() {
       } else {
         // Crear nuevo
         finalItem = {
-          id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          id: generateUuid(),
           household_id: activeHouseholdId,
           name: name.trim(),
           normalized_name: norm,
@@ -155,7 +155,7 @@ export function useShoppingList() {
           category,
           is_bought: false,
           estimated_price: estimatedPrice || null,
-          created_by: user?.id || null,
+          created_by: isValidUuid(user?.id) ? user!.id : null,
           created_by_name: user?.displayName || 'Alguien',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

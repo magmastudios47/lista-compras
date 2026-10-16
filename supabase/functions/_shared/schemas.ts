@@ -245,3 +245,5 @@ export type PlanificarSemanaResponse = z.infer<typeof PlanificarSemanaResponseSc
 export type PlanificarSemanaMeal = z.infer<typeof PlanificarSemanaMealSchema>;
 export type RegenerarPlatoResponse = z.infer<typeof RegenerarPlatoResponseSchema>;
 
+
+export type ChefIngredient = z.infer<typeof ChefIngredientSchema>;

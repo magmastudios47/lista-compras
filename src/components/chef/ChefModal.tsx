@@ -10,6 +10,7 @@ import { useChefAi } from '../../hooks/useChefAi';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useSettings } from '../../context/SettingsContext';
 import { calculateRecipeEstimatedCost } from '../../lib/priceMemory';
+import { calculatePantryDiscounts } from '../../lib/discountEngine';
 import {
   Sparkles,
   CookingPot,
@@ -127,23 +128,10 @@ export const ChefModal: React.FC<ChefModalProps> = ({
     onClose();
   };
 
-  // Seleccionar una de las 3 recetas sugeridas para revisar faltantes
+  // Seleccionar una de las 3 recetas sugeridas para revisar faltantes con el motor determinista
   const handleSelectSuggestRecipe = (receta: ChefSuggestRecipe) => {
     setSelectedSuggestRecipe(receta);
-    // Calcular faltantes para esta receta elegida
-    const comparisons: DiscountComparisonResult[] = receta.ingredientes.map((ing) => {
-      const pMatch = pantryItems.find((p) => p.name.toLowerCase().includes(ing.nombre.toLowerCase()));
-      const tiene = Boolean(pMatch);
-      return {
-        ingrediente: ing,
-        despensa_item: pMatch || null,
-        estado: tiene ? 'cubierto' : 'falta_total',
-        seleccionadoParaAgregar: !tiene && !ing.opcional,
-        cantidad_faltante: tiene ? 0 : ing.cantidad,
-        unidad_faltante: ing.unidad,
-        detalle: tiene ? `Tenés ${pMatch?.name} en despensa` : 'Falta en casa',
-      };
-    });
+    const comparisons = calculatePantryDiscounts(receta.ingredientes, pantryItems);
     setSuggestComparisons(comparisons);
   };
 
@@ -235,13 +223,7 @@ export const ChefModal: React.FC<ChefModalProps> = ({
           </div>
         )}
 
-        {/* Error banner si falló */}
-        {error && (
-          <div className="mt-3 p-3 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+
 
         {/* ---------------- MODO COCINAR FORMULARIO ---------------- */}
         {activeTab === 'cocinar' && !cookPreview && (

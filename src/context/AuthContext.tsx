@@ -27,52 +27,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isDemoMode = !isConfigured;
 
   useEffect(() => {
-    // 1. Restaurar usuario desde almacenamiento local persistente (si existe sesión previa)
+    let cachedProfile: UserProfile | null = null;
     const savedUserStr = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
     if (savedUserStr) {
       try {
         const parsed = JSON.parse(savedUserStr);
         if (parsed && parsed.id) {
-          setUser(parsed);
-          setLoading(false);
-          return;
+          cachedProfile = parsed;
         }
       } catch {}
     }
 
     if (isDemoMode) {
-      // En modo local sin Supabase: arranca en null (sin auto-login)
-      setUser(null);
+      setUser(cachedProfile);
       setLoading(false);
       return;
     }
 
-    // 2. Modo producción con Supabase Auth
+    // Si hay usuario en caché, mostrarlo de forma optimista mientras se verifica la sesión real en Supabase
+    if (cachedProfile) {
+      setUser(cachedProfile);
+    }
+
+    // 2. Modo producción con Supabase Auth (siempre verifica sesión y registra listener)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        const prevDisplayName = cachedProfile?.id === session.user.id ? cachedProfile.displayName : '';
         const profile: UserProfile = {
           id: session.user.id,
           email: session.user.email || '',
-          displayName: session.user.user_metadata?.full_name || '',
+          displayName: session.user.user_metadata?.full_name || prevDisplayName || '',
         };
         setUser(profile);
         localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(profile));
-      } else {
+      } else if (!cachedProfile || !cachedProfile.id.startsWith('usr_')) {
         setUser(null);
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       }
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        const savedNow = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+        let prevName = '';
+        try {
+          if (savedNow) {
+            const p = JSON.parse(savedNow);
+            if (p?.id === session.user.id) prevName = p.displayName || '';
+          }
+        } catch {}
         const profile: UserProfile = {
           id: session.user.id,
           email: session.user.email || '',
-          displayName: session.user.user_metadata?.full_name || '',
+          displayName: session.user.user_metadata?.full_name || prevName || '',
         };
         setUser(profile);
         localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(profile));
-      } else {
+      } else if (_event === 'SIGNED_OUT') {
         setUser(null);
         localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       }

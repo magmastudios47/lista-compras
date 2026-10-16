@@ -14,7 +14,14 @@ export const AccessGateView: React.FC = () => {
     refreshLicense,
   } = useHousehold();
 
-  const [activeOption, setActiveOption] = useState<'code' | 'buy' | 'invite'>('code');
+  const [activeOption, setActiveOption] = useState<'code' | 'buy' | 'invite'>(() => {
+    const savedOpt = sessionStorage.getItem('pending_access_option');
+    if (savedOpt === 'code' || savedOpt === 'buy' || savedOpt === 'invite') {
+      sessionStorage.removeItem('pending_access_option');
+      return savedOpt;
+    }
+    return 'code';
+  });
 
   // Estado para Canje de Código
   const [accessCode, setAccessCode] = useState('');
@@ -36,7 +43,14 @@ export const AccessGateView: React.FC = () => {
 
   // Modal de Mercado Pago
   const [isMpModalOpen, setIsMpModalOpen] = useState(false);
-  const [selectedPlanForBuy, setSelectedPlanForBuy] = useState<'base' | 'premium'>('base');
+  const [selectedPlanForBuy, setSelectedPlanForBuy] = useState<'base' | 'premium'>(() => {
+    const savedPlan = sessionStorage.getItem('pending_selected_plan');
+    if (savedPlan === 'base' || savedPlan === 'premium') {
+      sessionStorage.removeItem('pending_selected_plan');
+      return savedPlan;
+    }
+    return 'base';
+  });
 
   // Manejar Canje de Código de Acceso
   const handleRedeemCode = async (e: React.FormEvent) => {
@@ -408,6 +422,8 @@ export const AccessGateView: React.FC = () => {
         <MercadoPagoModal
           isOpen={isMpModalOpen}
           onClose={() => setIsMpModalOpen(false)}
+          initialTab="plans"
+          initialPlan={selectedPlanForBuy}
         />
       )}
     </div>

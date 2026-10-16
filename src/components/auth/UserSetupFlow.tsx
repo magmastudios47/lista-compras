@@ -18,11 +18,19 @@ export const UserSetupFlow: React.FC<UserSetupFlowProps> = ({ onBack }) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Estados para creación / unión de hogar
-  const [householdMode, setHouseholdMode] = useState<'create' | 'join'>('create');
+  // Estados para creación / unión de hogar (con detección automática de ?join=CODE de WhatsApp)
+  const [joinCodeInput, setJoinCodeInput] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('join') || sessionStorage.getItem('pending_join_code') || '';
+    if (code) sessionStorage.setItem('pending_join_code', code.toUpperCase());
+    return code.toUpperCase();
+  });
+  const [householdMode, setHouseholdMode] = useState<'create' | 'join'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('join') || sessionStorage.getItem('pending_join_code')) ? 'join' : 'create';
+  });
   const [newHhName, setNewHhName] = useState('');
   const [newHhCity, setNewHhCity] = useState('');
-  const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hhError, setHhError] = useState<string | null>(null);
 
   // 1. Si no hay usuario autenticado: Pantalla de Ingreso
@@ -303,6 +311,8 @@ export const UserSetupFlow: React.FC<UserSetupFlowProps> = ({ onBack }) => {
         const res = await joinHouseholdByCode(cleanCode);
         if (!res.success) {
           setHhError(res.message);
+        } else {
+          sessionStorage.removeItem('pending_join_code');
         }
       } catch (err: any) {
         setHhError(err.message || 'Error al unirte al hogar');

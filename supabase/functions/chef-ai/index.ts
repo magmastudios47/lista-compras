@@ -236,13 +236,22 @@ serve(async (req: Request) => {
     }
 
     // 3. Caché de consultas idénticas (para ahorrar tokens y dar respuesta instantánea)
-    // Para planificar_semana, los modos de planificación NO usan caché fija simple (incluyen timestamp/semilla)
+    // Para planificar_semana y regenerar_plato NO se usa caché estática (incluyen timestamp/semilla)
     const PROMPT_VERSION = 'v1.5.0';
-    const normalizedOrder = normalizeText(pedido || texto_despensa || JSON.stringify(dias_config || ''));
+    const sortedPantry = (Array.isArray(despensa) ? despensa : []).map((p: string) => normalizeText(p)).sort().join(',');
+    const sortedAvoid = (Array.isArray(platos_ya_elegidos) ? platos_ya_elegidos : []).map((p: string) => normalizeText(p)).sort().join(',');
+    const normalizedOrder = normalizeText(
+      pedido ||
+      texto_despensa ||
+      (modo === 'detalle_dia_menu' ? `${dia || ''}_${JSON.stringify(body.comidas || [])}` : '') ||
+      (modo === 'regenerar_plato' ? `${dia || ''}_${tipo || ''}_${sortedAvoid}` : '') ||
+      JSON.stringify(dias_config || '')
+    );
     const sortedRestrictions = (restricciones || []).map((r: string) => normalizeText(r)).sort().join(',');
-    const normalizedKey = modo === 'planificar_semana'
-      ? `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${Date.now()}_${Math.random()}`
-      : `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${personas || 4}_${sortedRestrictions}_${normalizeText(objetivo_perfil || '')}`;
+    const isDynamicMode = modo === 'planificar_semana' || modo === 'regenerar_plato';
+    const normalizedKey = isDynamicMode
+      ? `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${semilla || Date.now()}_${Math.random()}`
+      : `${PROMPT_VERSION}_${modo}_${normalizedOrder}_${personas || 4}_${sortedRestrictions}_${modo === 'sugerir' ? sortedPantry : ''}_${normalizeText(objetivo_perfil || '')}`;
     const cacheKey = await crypto.subtle
       .digest('SHA-256', new TextEncoder().encode(normalizedKey))
       .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join(''));

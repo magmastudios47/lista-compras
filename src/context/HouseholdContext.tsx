@@ -164,17 +164,52 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           .from('household_members')
           .select('household_id, role, display_name, joined_at, households(*)')
           .eq('user_id', user.id)
-          .limit(1);
+          .order('joined_at', { ascending: false });
 
         if (!memberErr && memberRows && memberRows.length > 0) {
-          const current = (memberRows[0] as any).households as Household;
-          setHousehold(current);
-          setChefUsedThisMonth(current.chef_queries_used_month || 0);
-          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(current));
+          const candidateHouseholds = memberRows
+            .map((r: any) => r.households as Household)
+            .filter(Boolean);
 
-          await fetchMembers(current.id);
-          await fetchLicense(current.id);
-          await fetchCredits(current.id);
+          let selectedHh = candidateHouseholds[0];
+
+          // Si pertenece a más de un hogar, priorizar el hogar con licencia activa (base/premium/tester)
+          if (candidateHouseholds.length > 1) {
+            const hhIds = candidateHouseholds.map((h) => h.id);
+            const { data: licRows } = await supabase
+              .from('licenses')
+              .select('household_id, plan_id, status, valid_until')
+              .in('household_id', hhIds)
+              .eq('status', 'active');
+
+            const validLicensedIds = new Set(
+              (licRows || [])
+                .filter((l: any) => ['base', 'premium', 'tester'].includes(l.plan_id) && (!l.valid_until || new Date(l.valid_until) > new Date()))
+                .map((l: any) => l.household_id)
+            );
+
+            // Si había un hogar guardado en localStorage y tiene licencia válida, respetarlo
+            let savedHhId: string | null = null;
+            try {
+              const savedStr = localStorage.getItem(STORAGE_KEYS.CURRENT_HOUSEHOLD);
+              if (savedStr) savedHhId = JSON.parse(savedStr)?.id || null;
+            } catch {}
+
+            if (savedHhId && validLicensedIds.has(savedHhId)) {
+              selectedHh = candidateHouseholds.find((h) => h.id === savedHhId) || selectedHh;
+            } else {
+              const firstLicensed = candidateHouseholds.find((h) => validLicensedIds.has(h.id));
+              if (firstLicensed) selectedHh = firstLicensed;
+            }
+          }
+
+          setHousehold(selectedHh);
+          setChefUsedThisMonth(selectedHh.chef_queries_used_month || 0);
+          localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(selectedHh));
+
+          await fetchMembers(selectedHh.id);
+          await fetchLicense(selectedHh.id);
+          await fetchCredits(selectedHh.id);
         } else {
           setHousehold(null);
           setMembers([]);
@@ -410,6 +445,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(targetHh));
         await fetchMembers(targetHh.id);
         await fetchLicense(targetHh.id);
+        await fetchCredits(targetHh.id);
         return { success: true, message: `¡Te uniste a ${targetHh.name} con éxito!` };
       }
     } catch (e: any) {
@@ -507,6 +543,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(hhData));
           await fetchLicense(hhData.id);
           await fetchMembers(hhData.id);
+          await fetchCredits(hhData.id);
         }
       }
 
@@ -550,19 +587,22 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const codeHash = await sha256Hex(cleanCode);
 
       if (!isConfigured || isDemoMode) {
+        const inferredPlan: PlanType = cleanCode.includes('PREM') ? 'premium' : cleanCode.includes('TEST') ? 'tester' : 'base';
+        const inferredCredits = inferredPlan === 'premium' ? 150 : inferredPlan === 'tester' ? 9999 : 40;
         const mockHh: Household = {
-          id: `hh_code_${Date.now()}`,
-          name: householdName,
-          invite_code: 'CODEOK',
+          id: household?.id || `hh_code_${Date.now()}`,
+          name: householdName || household?.name || 'Mi Hogar',
+          invite_code: household?.invite_code || 'CODEOK',
           currency: 'ARS',
-          monthly_chef_limit: 40,
+          monthly_chef_limit: inferredCredits,
           chef_queries_used_month: 0,
-          created_at: new Date().toISOString(),
+          created_at: household?.created_at || new Date().toISOString(),
         };
         setHousehold(mockHh);
-        setCurrentPlan('base');
+        setCurrentPlan(inferredPlan);
+        setRawCredits(inferredCredits);
         localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(mockHh));
-        return { success: true, householdId: mockHh.id, planId: 'base' };
+        return { success: true, householdId: mockHh.id, planId: inferredPlan };
       }
 
       const { data, error } = await supabase.rpc('redeem_access_code', {
@@ -585,6 +625,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           localStorage.setItem(STORAGE_KEYS.CURRENT_HOUSEHOLD, JSON.stringify(hhData));
           await fetchLicense(hhData.id);
           await fetchMembers(hhData.id);
+          await fetchCredits(hhData.id);
         }
       }
 

@@ -15,6 +15,7 @@ import { useShoppingList } from './hooks/useShoppingList';
 import { usePantry } from './hooks/usePantry';
 import { useChefAi } from './hooks/useChefAi';
 import { useHousehold } from './context/HouseholdContext';
+import { useSettings } from './context/SettingsContext';
 import { useAuth } from './context/AuthContext';
 import { useOfflineSync } from './context/OfflineSyncContext';
 import { UserSetupFlow } from './components/auth/UserSetupFlow';
@@ -29,7 +30,11 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('lista');
   const [isReturnView, setIsReturnView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.has('payment_status') || params.has('status');
+    return (
+      params.has('payment_status') ||
+      params.has('status') ||
+      window.location.pathname.startsWith('/checkout/')
+    );
   });
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -52,6 +57,7 @@ export const App: React.FC = () => {
   const [mpModalTab, setMpModalTab] = useState<'plans' | 'recharges'>('plans');
 
   const { isOnline } = useOfflineSync();
+  const { householdSettings, updateHouseholdSettings: updateSharedSettings } = useSettings();
   const { user, loading: authLoading } = useAuth();
   const {
     household,
@@ -135,6 +141,7 @@ export const App: React.FC = () => {
   const handlePromptAddToPantry = async (item: ShoppingItem, setAutoAlways: boolean = false) => {
     if (setAutoAlways) {
       await updateHouseholdSettings({ pantry_add_mode: 'auto' });
+      updateSharedSettings({ pantryAddMode: 'auto' });
     }
     await handleAutoAddToPantry(item);
   };
@@ -176,8 +183,15 @@ export const App: React.FC = () => {
     return (
       <PublicLandingView
         onLoginClick={() => setShowAuthModal(true)}
-        onCodeClick={() => setShowAuthModal(true)}
-        onSelectPlanToBuy={() => setShowAuthModal(true)}
+        onCodeClick={() => {
+          sessionStorage.setItem('pending_access_option', 'code');
+          setShowAuthModal(true);
+        }}
+        onSelectPlanToBuy={(planId) => {
+          sessionStorage.setItem('pending_access_option', 'buy');
+          sessionStorage.setItem('pending_selected_plan', planId);
+          setShowAuthModal(true);
+        }}
       />
     );
   }
@@ -302,7 +316,7 @@ export const App: React.FC = () => {
                 <div className="text-left">
                   <span>⚙️ Configuración del Hogar y Despensa</span>
                   <span className="block text-[11px] font-normal text-slate-500 dark:text-slate-400">
-                    Al comprar: {(household?.pantry_add_mode || 'ask') === 'ask' ? 'Preguntar' : (household?.pantry_add_mode === 'auto' ? 'Sumar automático' : 'No sumar')}
+                    Al comprar: {(householdSettings.pantryAddMode || household?.pantry_add_mode || 'ask') === 'ask' ? 'Preguntar' : ((householdSettings.pantryAddMode || household?.pantry_add_mode) === 'auto' ? 'Sumar automático' : 'No sumar')}
                   </span>
                 </div>
                 <span>→</span>

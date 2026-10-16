@@ -89,7 +89,7 @@ ON CONFLICT (household_id) DO UPDATE SET plan_id = 'tester', status = 'active', 
       console.error('Error buscando usuarios:', userErr.message);
       process.exit(1);
     }
-    const foundUser = users.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    const foundUser = (users.users as any[]).find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
     if (!foundUser) {
       console.error(`No se encontró ningún usuario con email ${email}`);
       process.exit(1);

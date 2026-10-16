@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { STORAGE_KEYS } from '../../lib/constants';
+import { calculatePantryDiscounts, mergeDuplicateIngredients } from '../../lib/discountEngine';
 import { ChefMenuResponse, DiscountComparisonResult, MealType, MenuDay, MenuItemMeal, PantryItem } from '../../types';
 import { useHousehold } from '../../context/HouseholdContext';
 import { useChefAi } from '../../hooks/useChefAi';
@@ -63,7 +65,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   pantryItems,
   onAddIngredientsToShoppingList,
 }) => {
-  const { isPremium, remainingQueries } = useHousehold();
+  const { household, isPremium, remainingQueries } = useHousehold();
   const { userPreferences, householdSettings, updateUserPreferences, updateHouseholdSettings } = useSettings();
   const {
     generateWeeklyMenu,
@@ -81,11 +83,42 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   const mandatoryDishes = householdSettings.weeklyMenuMandatoryDishes;
   const dietaryRestrictions = householdSettings.dietaryRestrictions;
 
-  // Menú generado y lista unificada
-  const [generatedMenu, setGeneratedMenu] = useState<ChefMenuResponse | null>(null);
-  const [unifiedComparisons, setUnifiedComparisons] = useState<DiscountComparisonResult[] | null>(null);
+  const menuStorageKey = household?.id ? `${STORAGE_KEYS.WEEKLY_MENU}_${household.id}` : STORAGE_KEYS.WEEKLY_MENU;
+
+  // Menú generado y lista unificada (persistidos en localStorage para no perderse al cambiar de pestaña)
+  const [generatedMenu, setGeneratedMenu] = useState<ChefMenuResponse | null>(() => {
+    try {
+      const saved = localStorage.getItem(menuStorageKey) || localStorage.getItem(STORAGE_KEYS.WEEKLY_MENU);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed?.menu || null;
+      }
+    } catch {}
+    return null;
+  });
+  const [unifiedComparisons, setUnifiedComparisons] = useState<DiscountComparisonResult[] | null>(() => {
+    try {
+      const saved = localStorage.getItem(menuStorageKey) || localStorage.getItem(STORAGE_KEYS.WEEKLY_MENU);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed?.comparisons || null;
+      }
+    } catch {}
+    return null;
+  });
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [editingMeal, setEditingMeal] = useState<{ dayIndex: number; mealIndex: number; name: string } | null>(null);
   const [regeneratingMealKey, setRegeneratingMealKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      if (generatedMenu && unifiedComparisons) {
+        const payload = JSON.stringify({ menu: generatedMenu, comparisons: unifiedComparisons });
+        localStorage.setItem(menuStorageKey, payload);
+        localStorage.setItem(STORAGE_KEYS.WEEKLY_MENU, payload);
+      }
+    } catch {}
+  }, [generatedMenu, unifiedComparisons, menuStorageKey]);
 
   // Atajos para selección masiva con persistencia automática
   const handleSelectAllMealsAllDays = () => {
@@ -150,9 +183,10 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
       .map(([dia, comidas]) => ({ dia, comidas }));
 
     if (daysConfig.length === 0) {
-      alert('Seleccioná al menos una comida en la semana.');
+      setValidationError('Seleccioná al menos una comida en la semana para planificar.');
       return;
     }
+    setValidationError(null);
 
     try {
       const { response, comparisons } = await generateWeeklyMenu({
@@ -196,15 +230,21 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     }
   };
 
-  // Reemplazar un plato puntual en la vista previa
+  // Reemplazar un plato puntual en la vista previa de forma inmutable
   const handleSaveMealEdit = (dayIndex: number, mealIndex: number, newName: string) => {
-    if (!generatedMenu) return;
-    const updatedDays = [...generatedMenu.dias];
-    const targetMeal = updatedDays[dayIndex].comidas[mealIndex];
-    if (targetMeal) {
-      targetMeal.nombre = newName.trim();
-      targetMeal.analisis_plato = [`${newName.trim()}: ingredientes actualizados`];
-    }
+    if (!generatedMenu || !newName.trim()) return;
+    const clean = newName.trim();
+    const updatedDays = generatedMenu.dias.map((d, dIdx) => {
+      if (dIdx !== dayIndex) return d;
+      return {
+        ...d,
+        comidas: d.comidas.map((c, mIdx) =>
+          mIdx === mealIndex
+            ? { ...c, nombre: clean, analisis_plato: [`${clean}: ingredientes actualizados`] }
+            : c
+        ),
+      };
+    });
     setGeneratedMenu({ ...generatedMenu, dias: updatedDays });
     setEditingMeal(null);
   };
@@ -241,6 +281,10 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     // Regresar al panel inicial
     setGeneratedMenu(null);
     setUnifiedComparisons(null);
+    try {
+      localStorage.removeItem(menuStorageKey);
+      localStorage.removeItem(STORAGE_KEYS.WEEKLY_MENU);
+    } catch {}
   };
 
   return (
@@ -272,12 +316,12 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
           </div>
         </div>
 
-        {/* Banner de error visible si falla la IA */}
-        {error && (
+        {/* Banner de error visible si falla la IA o validación */}
+        {(error || validationError) && (
           <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
             <div className="flex-1">
-              <p className="font-semibold">{error}</p>
+              <p className="font-semibold">{error || validationError}</p>
             </div>
           </div>
         )}
@@ -514,6 +558,10 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                 onClick={() => {
                   setGeneratedMenu(null);
                   setUnifiedComparisons(null);
+                  try {
+                    localStorage.removeItem(menuStorageKey);
+                    localStorage.removeItem(STORAGE_KEYS.WEEKLY_MENU);
+                  } catch {}
                 }}
                 className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700"
               >

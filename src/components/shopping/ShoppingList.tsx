@@ -5,6 +5,7 @@ import { Check, Trash2, RotateCcw, Plus, Archive, ChevronDown, ChevronUp, Shoppi
 import { AddItemDrawer } from './AddItemDrawer';
 import { saveHouseholdPrice } from '../../lib/priceMemory';
 import { useHousehold } from '../../context/HouseholdContext';
+import { useSettings } from '../../context/SettingsContext';
 import { evaluatePantryAddAction } from '../../lib/pantryAutoSync';
 import { calculateCartBudget, getEffectiveItemPrice, SEPA_ATTRIBUTION } from '../../lib/priceEngine';
 
@@ -52,6 +53,7 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
   onOpenChefModal,
 }) => {
   const { household } = useHousehold();
+  const { householdSettings } = useSettings();
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [showBought, setShowBought] = useState(true);
   const [itemJustBought, setItemJustBought] = useState<ShoppingItem | null>(null);
@@ -77,7 +79,14 @@ export const ShoppingList: React.FC<ShoppingListProps> = ({
 
     if (willBeBought) {
       // 1. Evaluar política del hogar
-      const action = evaluatePantryAddAction(item, household);
+      const effectiveHousehold = household
+        ? {
+            ...household,
+            pantry_add_mode: householdSettings.pantryAddMode || household.pantry_add_mode || 'ask',
+            pantry_exclude_cleaning: householdSettings.pantryExcludeCleaning ?? household.pantry_exclude_cleaning ?? true,
+          }
+        : null;
+      const action = evaluatePantryAddAction(item, effectiveHousehold);
 
       if (action === 'auto') {
         // Modo automático: sumar a la despensa inmediatamente

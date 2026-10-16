@@ -94,11 +94,10 @@ serve(async (req: Request) => {
       if (!verification.valid) {
         console.warn('Alerta de seguridad Webhook MP:', verification.reason);
         // Registrar intento sospechoso en log de seguridad
-        await supabaseAdmin.from('ai_usage_log').insert({
-          household_id: null,
-          mode: 'cocinar',
-          status: 'error',
-          error_message: `Webhook MP rechazado por firma inválida: ${verification.reason}`,
+        await supabaseAdmin.from('invite_attempt_logs').insert({
+          identifier: `mp_webhook_${dataId || 'unknown'}`,
+          attempt_type: 'mp_webhook_signature',
+          success: false,
         }).catch(() => {});
 
         return new Response(JSON.stringify({ error: 'Firma inválida.', details: verification.reason }), {

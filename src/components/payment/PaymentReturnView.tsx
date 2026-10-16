@@ -12,7 +12,14 @@ export const PaymentReturnView: React.FC<PaymentReturnViewProps> = ({ onBackToAp
 
   // Leer parámetros de URL
   const searchParams = new URLSearchParams(window.location.search);
-  const statusParam = searchParams.get('payment_status') || searchParams.get('status');
+  const pathStatus = window.location.pathname.includes('/checkout/success')
+    ? 'approved'
+    : window.location.pathname.includes('/checkout/pending')
+    ? 'pending'
+    : window.location.pathname.includes('/checkout/failure')
+    ? 'failure'
+    : null;
+  const statusParam = searchParams.get('payment_status') || searchParams.get('status') || pathStatus;
   const externalRef = searchParams.get('ref') || searchParams.get('external_reference');
 
   useEffect(() => {

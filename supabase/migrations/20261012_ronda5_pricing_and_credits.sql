@@ -296,12 +296,17 @@ CREATE TABLE IF NOT EXISTS public.credit_recharge_packages (
 
 INSERT INTO public.credit_recharge_packages (id, name, credits, price_usd)
 VALUES 
-    ('pack_25', 'Pack 25 Recetas Chef', 25, 3.00),
-    ('pack_60', 'Pack 60 Recetas Chef', 60, 6.00),
-    ('pack_150', 'Pack 150 Recetas Chef', 150, 12.00)
+    ('pack_25', 'Pack Inicial (25 créditos)', 25, 1.50),
+    ('pack_60', 'Pack Familiar (60 créditos)', 60, 3.00),
+    ('pack_150', 'Pack Mega (150 créditos)', 150, 6.00)
 ON CONFLICT (id) DO UPDATE SET
     credits = EXCLUDED.credits,
     price_usd = EXCLUDED.price_usd;
 
 ALTER TABLE public.credit_recharge_packages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Lectura pública de paquetes de créditos" ON public.credit_recharge_packages FOR SELECT USING (true);
+
+-- Permitir paquetes de recarga en tabla payments y todos los modos en ai_usage_log
+ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_plan_id_fkey;
+ALTER TABLE public.ai_usage_log DROP CONSTRAINT IF EXISTS ai_usage_log_mode_check;
+ALTER TABLE public.ai_usage_log ADD CONSTRAINT ai_usage_log_mode_check CHECK (mode IN ('cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'menu_semanal', 'planificar_semana', 'detalle_dia_menu', 'regenerar_plato'));

@@ -80,6 +80,8 @@ serve(async (req: Request) => {
     let amountUsd = 0;
     let effectivePlanId = plan_id;
     let planTitle = '';
+    let planName = '';
+    let planDescription = '';
 
     if (plan_id.startsWith('pack_')) {
       const { data: pack, error: packErr } = await supabaseAdmin
@@ -98,7 +100,9 @@ serve(async (req: Request) => {
 
       amountUsd = Number(pack.price_usd);
       effectivePlanId = pack.id;
+      planName = pack.name;
       planTitle = `Lista Compars - ${pack.name}`;
+      planDescription = `Recarga de ${pack.credits} créditos para el Chef IA (sin vencimiento)`;
     } else {
       const targetPlan = plans.find((p) => p.id === (plan_id === 'upgrade' ? 'premium' : plan_id));
       if (!targetPlan || targetPlan.id === 'free') {
@@ -117,7 +121,9 @@ serve(async (req: Request) => {
 
       amountUsd = Number(targetPlan.price_usd);
       effectivePlanId = targetPlan.id;
-      planTitle = `Lista Compars - ${targetPlan.name}`;
+      planName = targetPlan.name;
+      planTitle = `Lista Compars - ${targetPlan.name} (Pago Único)`;
+      planDescription = `Licencia de por vida para el hogar (${targetPlan.monthly_chef_queries} créditos iniciales de Chef IA)`;
 
       if (plan_id === 'upgrade') {
         if (currentLicense?.plan_id === 'base') {
@@ -125,6 +131,7 @@ serve(async (req: Request) => {
           const basePrice = basePlan ? Number(basePlan.price_usd) : 10.0;
           amountUsd = Math.max(0, amountUsd - basePrice); // Diferencia: 20 - 10 = 10 USD
           effectivePlanId = 'premium';
+          planName = 'Upgrade a Plan Premium';
           planTitle = 'Lista Compars - Upgrade a Plan Premium';
         } else {
           return new Response(JSON.stringify({ error: 'Solo se puede hacer upgrade si el hogar tiene Plan Base.' }), {
@@ -187,13 +194,13 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           preference_id: `pref_sandbox_${attemptId}`,
-          init_point: `${clientReturnUrl}/checkout/pending?ref=${externalReference}`,
-          sandbox_init_point: `${clientReturnUrl}/checkout/pending?ref=${externalReference}`,
+          init_point: `${clientReturnUrl}/?payment_status=pending&ref=${externalReference}`,
+          sandbox_init_point: `${clientReturnUrl}/?payment_status=pending&ref=${externalReference}`,
           external_reference: externalReference,
           amount_ars: amountArs,
           amount_usd: amountUsd,
           exchange_rate: rate,
-          plan_name: targetPlan.name,
+          plan_name: planName,
           notice: 'Credenciales de Mercado Pago no configuradas en servidor. Modo sandbox.',
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -210,8 +217,8 @@ serve(async (req: Request) => {
         items: [
           {
             id: effectivePlanId,
-            title: `Lista Compars - ${targetPlan.name} (Pago Único)`,
-            description: `Licencia de por vida para el hogar (${targetPlan.monthly_chef_queries} consultas/mes de Chef IA)`,
+            title: planTitle,
+            description: planDescription,
             quantity: 1,
             currency_id: 'ARS',
             unit_price: amountArs,
@@ -222,9 +229,9 @@ serve(async (req: Request) => {
         },
         external_reference: externalReference,
         back_urls: {
-          success: `${clientReturnUrl}/checkout/success?ref=${externalReference}`,
-          failure: `${clientReturnUrl}/checkout/failure?ref=${externalReference}`,
-          pending: `${clientReturnUrl}/checkout/pending?ref=${externalReference}`,
+          success: `${clientReturnUrl}/?payment_status=approved&ref=${externalReference}`,
+          failure: `${clientReturnUrl}/?payment_status=failure&ref=${externalReference}`,
+          pending: `${clientReturnUrl}/?payment_status=pending&ref=${externalReference}`,
         },
         auto_return: 'approved',
         notification_url: `${supabaseUrl}/functions/v1/mp-webhook`,
@@ -255,7 +262,7 @@ serve(async (req: Request) => {
         amount_ars: amountArs,
         amount_usd: amountUsd,
         exchange_rate: rate,
-        plan_name: targetPlan.name,
+        plan_name: planName,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

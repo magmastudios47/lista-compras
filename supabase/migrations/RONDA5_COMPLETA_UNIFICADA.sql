@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     household_id UUID NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    plan_id TEXT NOT NULL REFERENCES public.plans(id),
+    plan_id TEXT NOT NULL,
     amount_usd NUMERIC(10,2) NOT NULL,
     amount_ars NUMERIC(10,2) NOT NULL,
     exchange_rate NUMERIC(10,2) NOT NULL,
@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_plan_id_fkey;
 CREATE INDEX IF NOT EXISTS idx_payments_household ON public.payments(household_id);
 CREATE INDEX IF NOT EXISTS idx_payments_external_ref ON public.payments(external_reference);
 CREATE INDEX IF NOT EXISTS idx_payments_mp_id ON public.payments(mercadopago_payment_id);
@@ -220,7 +221,7 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     household_id UUID NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    mode TEXT NOT NULL CHECK (mode IN ('cocinar', 'sugerir', 'interpretar_despensa', 'menu_semanal')),
+    mode TEXT NOT NULL CHECK (mode IN ('cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'menu_semanal', 'planificar_semana', 'detalle_dia_menu', 'regenerar_plato')),
     prompt_tokens INT NOT NULL DEFAULT 0,
     completion_tokens INT NOT NULL DEFAULT 0,
     reasoning_tokens INT NOT NULL DEFAULT 0,
@@ -246,6 +247,8 @@ ALTER TABLE public.ai_usage_log ADD COLUMN IF NOT EXISTS cost_usd NUMERIC(10, 6)
 ALTER TABLE public.ai_usage_log ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'ia';
 ALTER TABLE public.ai_usage_log ADD COLUMN IF NOT EXISTS success BOOLEAN DEFAULT true;
 ALTER TABLE public.ai_usage_log ADD COLUMN IF NOT EXISTS credits_deducted INT DEFAULT 0;
+ALTER TABLE public.ai_usage_log DROP CONSTRAINT IF EXISTS ai_usage_log_mode_check;
+ALTER TABLE public.ai_usage_log ADD CONSTRAINT ai_usage_log_mode_check CHECK (mode IN ('cocinar', 'sugerir', 'interpretar_items', 'interpretar_despensa', 'menu', 'menu_semanal', 'planificar_semana', 'detalle_dia_menu', 'regenerar_plato'));
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_household_created ON public.ai_usage_log(household_id, created_at);
 
@@ -462,9 +465,9 @@ CREATE TABLE IF NOT EXISTS public.credit_recharge_packages (
 
 INSERT INTO public.credit_recharge_packages (id, name, credits, price_usd)
 VALUES 
-    ('pack_25', 'Pack 25 Recetas Chef', 25, 3.00),
-    ('pack_60', 'Pack 60 Recetas Chef', 60, 6.00),
-    ('pack_150', 'Pack 150 Recetas Chef', 150, 12.00)
+    ('pack_25', 'Pack Inicial (25 créditos)', 25, 1.50),
+    ('pack_60', 'Pack Familiar (60 créditos)', 60, 3.00),
+    ('pack_150', 'Pack Mega (150 créditos)', 150, 6.00)
 ON CONFLICT (id) DO UPDATE SET
     credits = EXCLUDED.credits,
     price_usd = EXCLUDED.price_usd;
@@ -970,23 +973,42 @@ BEGIN
     FROM public.plans
     WHERE id = v_code.plan_id;
 
-    INSERT INTO public.households (
-        name,
-        city,
-        monthly_chef_limit,
-        chef_queries_used_month,
-        created_by
-    ) VALUES (
-        coalesce(nullif(trim(p_household_name), ''), 'Mi Hogar'),
-        coalesce(p_city, ''),
-        coalesce(v_plan.monthly_chef_queries, 40),
-        0,
-        v_user_id
-    ) RETURNING id INTO v_hh_id;
+    -- Si el usuario ya es dueño de un hogar sin licencia paga activa, activar ese hogar en vez de duplicarlo
+    SELECT hm.household_id INTO v_hh_id
+    FROM public.household_members hm
+    LEFT JOIN public.licenses l ON l.household_id = hm.household_id
+    WHERE hm.user_id = v_user_id
+      AND hm.role = 'owner'
+      AND (l.plan_id IS NULL OR l.plan_id = 'free')
+    ORDER BY hm.joined_at DESC
+    LIMIT 1;
 
-    INSERT INTO public.household_members (household_id, user_id, role)
-    VALUES (v_hh_id, v_user_id, 'owner')
-    ON CONFLICT (household_id, user_id) DO UPDATE SET role = 'owner';
+    IF v_hh_id IS NOT NULL THEN
+        UPDATE public.households
+        SET name = coalesce(nullif(trim(p_household_name), ''), name),
+            city = coalesce(nullif(trim(p_city), ''), city),
+            monthly_chef_limit = coalesce(v_plan.monthly_chef_queries, 40),
+            updated_at = now()
+        WHERE id = v_hh_id;
+    ELSE
+        INSERT INTO public.households (
+            name,
+            city,
+            monthly_chef_limit,
+            chef_queries_used_month,
+            created_by
+        ) VALUES (
+            coalesce(nullif(trim(p_household_name), ''), 'Mi Hogar'),
+            coalesce(p_city, ''),
+            coalesce(v_plan.monthly_chef_queries, 40),
+            0,
+            v_user_id
+        ) RETURNING id INTO v_hh_id;
+
+        INSERT INTO public.household_members (household_id, user_id, role)
+        VALUES (v_hh_id, v_user_id, 'owner')
+        ON CONFLICT (household_id, user_id) DO UPDATE SET role = 'owner';
+    END IF;
 
     INSERT INTO public.licenses (
         household_id,
@@ -1004,6 +1026,19 @@ BEGIN
         plan_id = EXCLUDED.plan_id,
         status = 'active',
         valid_until = NULL;
+
+    -- Acreditar los créditos iniciales del plan en el libro mayor (credit_ledger)
+    INSERT INTO public.credit_ledger (
+        household_id,
+        delta,
+        reason,
+        reference_id
+    ) VALUES (
+        v_hh_id,
+        coalesce(v_plan.monthly_chef_queries, 40),
+        'access_code_grant',
+        'code_redemption_' || v_code.id::text || '_' || v_hh_id::text
+    ) ON CONFLICT (household_id, reference_id) WHERE reference_id IS NOT NULL DO NOTHING;
 
     UPDATE public.access_codes
     SET times_used = times_used + 1
@@ -1127,6 +1162,7 @@ ALTER TABLE public.credit_recharge_packages ENABLE ROW LEVEL SECURITY;
 -- 1. households
 DROP POLICY IF EXISTS "Usuarios pueden ver los hogares a los que pertenecen" ON public.households;
 DROP POLICY IF EXISTS "Miembros con licencia activa pueden ver su hogar" ON public.households;
+DROP POLICY IF EXISTS "Miembros pueden ver su hogar" ON public.households;
 CREATE POLICY "Miembros pueden ver su hogar"
     ON public.households FOR SELECT
     USING (public.user_belongs_to_household(id));

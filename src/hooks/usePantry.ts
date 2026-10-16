@@ -3,11 +3,13 @@ import { Category, PantryItem, Unit } from '../types';
 import { useHousehold } from '../context/HouseholdContext';
 import { isConfigured, supabase } from '../lib/supabaseClient';
 import { offlineStorage } from '../lib/offlineStorage';
-import { singularizeIngredient } from '../lib/normalizer';
+import { singularizeIngredient, generateUuid } from '../lib/normalizer';
+import { useAuth } from '../context/AuthContext';
 import { pantrySyncManager } from '../lib/pantryAutoSync';
 
 export function usePantry() {
   const { household } = useHousehold();
+  const { isDemoMode } = useAuth();
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +30,7 @@ export function usePantry() {
       setPantryItems([]);
     }
 
-    if (!isConfigured) {
+    if (isDemoMode || !isConfigured) {
       setLoading(false);
       return;
     }
@@ -42,7 +44,7 @@ export function usePantry() {
           .eq('household_id', activeHousehold.id)
           .order('name', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           setPantryItems(data as PantryItem[]);
           offlineStorage.savePantryItems(data as PantryItem[]);
         }
@@ -128,7 +130,7 @@ export function usePantry() {
           return next;
         });
 
-        if (isConfigured) {
+        if (!isDemoMode && isConfigured) {
           try {
             await supabase.from('pantry_items').update(itemResult).eq('id', existing.id);
           } catch {}
@@ -141,7 +143,7 @@ export function usePantry() {
         }
       } else {
         itemResult = {
-          id: `pantry_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          id: generateUuid(),
           household_id: activeHouseholdId,
           name: name.trim(),
           normalized_name: norm,
@@ -158,7 +160,7 @@ export function usePantry() {
           return next;
         });
 
-        if (isConfigured) {
+        if (!isDemoMode && isConfigured) {
           try {
             await supabase.from('pantry_items').insert(itemResult);
           } catch {}
@@ -194,7 +196,7 @@ export function usePantry() {
         return next;
       });
 
-      if (isConfigured) {
+      if (!isDemoMode && isConfigured) {
         await supabase.from('pantry_items').update(updates).eq('id', id);
       } else {
         offlineStorage.enqueueMutation({
@@ -216,7 +218,7 @@ export function usePantry() {
         return next;
       });
 
-      if (isConfigured) {
+      if (!isDemoMode && isConfigured) {
         await supabase.from('pantry_items').delete().eq('id', id);
       } else {
         offlineStorage.enqueueMutation({
@@ -252,7 +254,7 @@ export function usePantry() {
     });
 
     // 2. Sincronizar en Supabase si está online
-    if (isConfigured) {
+    if (!isDemoMode && isConfigured) {
       await supabase.from('pantry_items').update({ deleted_at: now }).in('id', ids);
     }
 
@@ -275,7 +277,7 @@ export function usePantry() {
       return next;
     });
 
-    if (isConfigured) {
+    if (!isDemoMode && isConfigured) {
       await supabase.from('pantry_items').update({ deleted_at: null }).in('id', clearedIds);
     }
 
@@ -293,7 +295,7 @@ export function usePantry() {
       return next;
     });
 
-    if (isConfigured) {
+    if (!isDemoMode && isConfigured) {
       await supabase.from('pantry_items').delete().in('id', clearedIds);
     } else {
       clearedIds.forEach((id) => {
@@ -353,7 +355,7 @@ export function usePantry() {
           return next;
         });
 
-        if (isConfigured) {
+        if (!isDemoMode && isConfigured) {
           try {
             await supabase
               .from('pantry_items')
